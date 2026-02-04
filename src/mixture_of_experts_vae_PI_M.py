@@ -537,8 +537,7 @@ vae_M.fit(X_train_M, epochs=80, batch_size=best_params_M["batch_size"])
 
 encoder_M.trainable = False
 
-print("🟢 Concatenate datasets") 
-# Latent features for train
+print("🟢 Concatenate datasets")
 z_mu_PI, z_lv_PI  = extract_latent_stats(encoder_PI, X_train_PI)
 z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
 

@@ -21,8 +21,8 @@ ACTIVITIES = ['FASE REPOSO CON K5', 'TAPIZ RODANTE',
 ACTIVITIES_TO_BE_REMOVED=['TAPIZ RODANTE', 'YOGA']
 
 SUPERCLASES_CAPTURED24 = ['WALKING', 'HOUSEHOLD-CHORES',
-                                 'STANDING', 'SLEEP', 'BICYCLING',
-                                 'SITTING', 'MIXED-ACTIVITY', 'SPORTS']
+                          'STANDING', 'SLEEP', 'BICYCLING',
+                          'SITTING', 'MIXED-ACTIVITY', 'SPORTS']
 
 MAPPING_CAPTURED24 = {
     # WALKING

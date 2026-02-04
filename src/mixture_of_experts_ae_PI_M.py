@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 import optuna
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
 from tensorflow.keras import layers, models, regularizers

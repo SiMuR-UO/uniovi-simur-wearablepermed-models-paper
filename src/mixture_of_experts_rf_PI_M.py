@@ -6,7 +6,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GroupKFold, cross_validate
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 

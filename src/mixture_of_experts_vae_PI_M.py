@@ -7,14 +7,13 @@ import matplotlib.pyplot as plt
 import optuna
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import GroupShuffleSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
 import tensorflow as tf
 from keras import Model, Input
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session, shape
 

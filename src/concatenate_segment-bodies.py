@@ -1,5 +1,4 @@
 import numpy as np
-from collections import defaultdict
 
 print("🟢 load stack PI and M")
 stack_data_PI = np.load("/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI/Modelo_BRF_8superclases_PI/data_feature_all.npz")

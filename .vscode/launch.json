@@ -1,0 +1,35 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+          "name": "WearablePerMed Models Paper",
+          "type": "debugpy",
+          "request": "launch",
+          "program": "${file}",
+          "args": [
+            // concatenate_segment-bodies.py
+
+            // Stacking with two Random Forest base models: stacking_rf_PI_M.py
+            //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+            //"--superclases", "Captured24",
+            //"--k-folds", "3",
+            //"--step", "1",
+            //"--loops", "1",
+            //"--is-random-state"
+
+            // MoE with two Random Forest experts: mixture_of_experts_rf_PI_M.py 
+            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+
+            // MoE with two Autoencoder experts: mixture_of_experts_ae_PI_M.py 
+            //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+
+            // MoE with two Variational Autoencoder experts: mixture_of_experts_vae_PI_M.py
+            //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",            
+          ],
+          "console": "integratedTerminal"
+        }
+    ]
+}

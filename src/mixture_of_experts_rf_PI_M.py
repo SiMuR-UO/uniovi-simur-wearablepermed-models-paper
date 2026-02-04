@@ -123,7 +123,7 @@ def pretreatment(y_data):
 def superclases_captured24(y_data):
     return np.array([MAPPING_CAPTURED24.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
+def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
     # Transporm string labels to numbers
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
@@ -264,27 +264,27 @@ def base_kfold_cross_validation(X_train, y_train, m_train, k):
 
     return expert_model, metrics     
 
-def build_gate(model_PI, model_M, X_PI, X_M, y):
-    pa_val = model_PI.predict_proba(X_PI)
-    pb_val = model_M.predict_proba(X_M)
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+    p_PI_val = expert_PI.predict_proba(X_PI)
+    p_M_val = expert_M.predict_proba(X_M)
 
     # Per-sample correctness
-    correct_a = (pa_val.argmax(axis=1) == y).astype(int)
-    correct_b = (pb_val.argmax(axis=1) == y).astype(int)
+    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
+    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
 
-    conf_a = pa_val.max(axis=1)
-    conf_b = pb_val.max(axis=1)
+    conf_PI = p_PI_val.max(axis=1)
+    conf_M = p_M_val.max(axis=1)
 
     gate_y = np.zeros_like(y)
 
-    mask_a = (correct_a == 1) & (correct_b == 0)
-    gate_y[mask_a] = 1
+    mask_PI = (correct_PI == 1) & (correct_M == 0)
+    gate_y[mask_PI] = 1
 
-    mask_b = (correct_b == 1) & (correct_a == 0)
-    gate_y[mask_b] = 0
+    mask_M = (correct_M == 1) & (correct_PI == 0)
+    gate_y[mask_M] = 0
 
-    mask_tie = (correct_a == correct_b)
-    gate_y[mask_tie] = (conf_a[mask_tie] > conf_b[mask_tie]).astype(int)
+    mask_tie = (correct_PI == correct_M)
+    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
 
     return gate_y
 
@@ -366,7 +366,7 @@ print("\n")
 
 print("🟢 Build gate validation datasets")
 X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-y_gate_val = build_gate(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
+y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
 
 print("🟢 Training gate")
 gate = Pipeline([
@@ -382,7 +382,7 @@ gate.fit(X_gate_val, y_gate_val)
 
 print("🟢 Validate gate")
 X_gate_test = np.hstack([X_test_PI, X_test_M])
-y_gate_test = build_gate(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
+y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
 
 gate_pred = gate.predict(X_gate_test)
 

@@ -68,8 +68,6 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-N_TRIALS = 1
-
 def parse_args(args):
     """Parse command line parameters
 
@@ -88,7 +86,15 @@ def parse_args(args):
         required=True,        
         dest="stack_all",       
         help=f"Participant stack data."        
-    )            
+    ) 
+    parser.add_argument(
+        "-optimize-trials",
+        "--optimize-trials",               
+        dest="optimize_trials",
+        type=int,
+        default=1,               
+        help=f"Optimize hyperparameters num trials."        
+    )               
     parser.add_argument(
         "-v",
         "--verbose",
@@ -428,14 +434,14 @@ print("🟢 Split stack (Training/Validation/Test)")
 
 print("🟢 Optimize Autoencoder hyperparameters PI")
 study_PI = optuna.create_study(direction="minimize")
-study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI), n_trials=N_TRIALS)
+study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI), n_trials=args.optimize_trials)
 
 best_params_PI = study_PI.best_trial.params
 print(best_params_PI)
 
 print("🟢 Optimize Autoencoder hyperparameters M")
 study_M = optuna.create_study(direction="minimize")
-study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M), n_trials=N_TRIALS)
+study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M), n_trials=args.optimize_trials)
 
 best_params_M = study_M.best_trial.params
 print(best_params_M)

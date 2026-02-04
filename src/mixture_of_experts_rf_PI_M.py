@@ -350,7 +350,7 @@ sc = StandardScaler()
 
 X_data = sc.fit_transform(X_data)
 
-print("🟢 Split Dataset (Training/Test)")
+print("🟢 Split Dataset (Training/Validation/Test)")
 (X_train_PI, X_validation_PI, X_test_PI,
  X_train_M, X_validation_M, X_test_M,
  y_train, y_validation, y_test,

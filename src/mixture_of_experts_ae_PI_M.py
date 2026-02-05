@@ -433,13 +433,11 @@ args = parse_args(sys.argv[1:])
 print("🟢 load stack PI+M")
 stack_data_all = np.load(args.stack_all)
 
-# get datasets from stack
 X_data_all = stack_data_all[WINDOW_DATA]
 y_data_all = stack_data_all[WINDOW_LABELS]
 m_data_all = stack_data_all[WINDOW_METADATA]
 
-# remove some activities
-print("🟢 Remove some activities from stack")
+print("🟢 Remove some activities")
 ACTIVITIES = [x for x in ACTIVITIES if x not in ACTIVITIES_TO_BE_REMOVED]
 
 indices_to_remove = pretreatment(y_data_all)
@@ -448,8 +446,7 @@ X_data = np.delete(X_data_all, indices_to_remove, axis=0)
 y_data = np.delete(y_data_all, indices_to_remove, axis=0)
 m_data = np.delete(m_data_all, indices_to_remove, axis=0)
 
-# Superclasses from PI and M
-print("🟢 Regroup in superclasses from PI and M Datasets")
+print("🟢 Regroup labels vector")
 if (args.superclases == "Captured24"):
     ACTIVITIES = SUPERCLASES_CAPTURED24
     (y_data) = superclases_captured24(y_data)    

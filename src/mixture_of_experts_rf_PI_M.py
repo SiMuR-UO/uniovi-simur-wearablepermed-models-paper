@@ -378,7 +378,7 @@ X_data = np.delete(X_data_all, indices_to_remove, axis=0)
 y_data = np.delete(y_data_all, indices_to_remove, axis=0)
 m_data = np.delete(m_data_all, indices_to_remove, axis=0)
 
-print("🟢 Regroup in superclasses from PI and M Datasets")
+print("🟢 Regroup labels vector")
 if (args.superclases == "Captured24"):
     ACTIVITIES = SUPERCLASES_CAPTURED24
     (y_data) = superclases_captured24(y_data)    

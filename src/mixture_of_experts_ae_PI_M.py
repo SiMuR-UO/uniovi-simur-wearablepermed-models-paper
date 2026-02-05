@@ -2,6 +2,8 @@ import sys
 import argparse
 import logging
 import numpy as np
+import pandas as pd
+from pathlib import Path
 import seaborn as sns
 import matplotlib.pyplot as plt
 import optuna
@@ -120,7 +122,15 @@ def parse_args(args):
         "--superclases",
         dest="superclases",        
         help=f"Use Superclases: Captured24, CPA-METS"
-    )    
+    )
+    parser.add_argument(
+        "-loops",
+        "--loops",
+        dest="loops",        
+        type=int,        
+        default=30,        
+        help="Number of loops."
+    )     
     parser.add_argument(
         "-optimize-trials",
         "--optimize-trials",               
@@ -466,134 +476,206 @@ print("🟢 Split stack (Training/Validation/Test)")
  m_train, m_validation, m_test,
  class_names) = participant_group_split(X_data, y_data, m_data)
 
-print("🟢 Optimize Autoencoder hyperparameters PI")
-study_PI = optuna.create_study(direction="minimize")
-study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI), n_trials=args.optimize_trials)
+loops = []
 
-best_params_PI = study_PI.best_trial.params
-print(best_params_PI)
+expert_model_test_accuracies_PI = []
+expert_model_test_f1_scores_PI = []
+expert_model_test_accuracies_M = []
+expert_model_test_f1_scores_M = []
+gate_model_test_accuracies = []
+moe_model_test_soft_accuracies = []
+moe_model_test_soft_f1_scores = []
+moe_model_test_hard_accuracies = []
+moe_model_test_hard_f1_scores = []
 
-print("🟢 Optimize Autoencoder hyperparameters M")
-study_M = optuna.create_study(direction="minimize")
-study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M), n_trials=args.optimize_trials)
+for loop in range(args.loops):
+    print("🔵 Loop: " + str(loop))
+    loops.append(loop)
 
-best_params_M = study_M.best_trial.params
-print(best_params_M)
+    print("🟢 Optimize Autoencoder hyperparameters PI")
+    study_PI = optuna.create_study(direction="minimize")
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI), n_trials=args.optimize_trials)
 
-print("🟢 Build Autoencoder with best parameters PI")
-clear_session()
+    best_params_PI = study_PI.best_trial.params
+    print(best_params_PI)
 
-autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
+    print("🟢 Optimize Autoencoder hyperparameters M")
+    study_M = optuna.create_study(direction="minimize")
+    study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M), n_trials=args.optimize_trials)
 
-print("🟢 Compile Autoencoder PI")
-autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
+    best_params_M = study_M.best_trial.params
+    print(best_params_M)
 
-autoencoder_PI.summary()
+    print("🟢 Build Autoencoder with best parameters PI")
+    clear_session()
 
-print("🟢 Build Autoencoder with best parameters M")
-clear_session()
+    autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
 
-autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    print("🟢 Compile Autoencoder PI")
+    autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
 
-print("🟢 Compile Autoencoder M")
-autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
+    autoencoder_PI.summary()
 
-autoencoder_M.summary()
+    print("🟢 Build Autoencoder with best parameters M")
+    clear_session()
 
-print("🟢 Compute reconstruction MSE for PI")
-X_train_pred_PI = autoencoder_PI.predict(X_train_PI)
-X_test_pred_PI  = autoencoder_PI.predict(X_test_PI)
+    autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
 
-mse_train_PI = np.mean(np.square(X_train_PI - X_train_pred_PI), axis=1)
-mse_test_PI  = np.mean(np.square(X_test_PI - X_test_pred_PI),  axis=1)
+    print("🟢 Compile Autoencoder M")
+    autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
 
-print("Mean reconstruction MSE for train PI:", np.mean(mse_train_PI))
-print("Mean reconstruction MSE for test PI:", np.mean(mse_test_PI))
+    autoencoder_M.summary()
 
-print("🟢 Compute reconstruction MSE for M")
-X_train_pred_M = autoencoder_M.predict(X_train_M)
-X_test_pred_M  = autoencoder_M.predict(X_test_M)
+    print("🟢 Compute reconstruction MSE for PI")
+    X_train_pred_PI = autoencoder_PI.predict(X_train_PI)
+    X_test_pred_PI  = autoencoder_PI.predict(X_test_PI)
 
-mse_train_M = np.mean(np.square(X_train_M - X_train_pred_M), axis=1)
-mse_test_M  = np.mean(np.square(X_test_M - X_test_pred_M),  axis=1)
+    mse_train_PI = np.mean(np.square(X_train_PI - X_train_pred_PI), axis=1)
+    mse_test_PI  = np.mean(np.square(X_test_PI - X_test_pred_PI),  axis=1)
 
-print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
-print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
+    print("Mean reconstruction MSE for train PI:", np.mean(mse_train_PI))
+    print("Mean reconstruction MSE for test PI:", np.mean(mse_test_PI))
 
-if args.plot_tsne == True:
-    print("🟢 Latent Space t-SNE plots")
-    z_PI = get_latent(encoder_PI, X_train_PI)
-    z_M  = get_latent(encoder_M, X_train_M)
+    print("🟢 Compute reconstruction MSE for M")
+    X_train_pred_M = autoencoder_M.predict(X_train_M)
+    X_test_pred_M  = autoencoder_M.predict(X_test_M)
 
-    Z_PI_tsne = compute_tsne(z_PI)
-    Z_M_tsne  = compute_tsne(z_M)
+    mse_train_M = np.mean(np.square(X_train_M - X_train_pred_M), axis=1)
+    mse_test_M  = np.mean(np.square(X_test_M - X_test_pred_M),  axis=1)
 
-    plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
-    plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
+    print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
+    print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
 
-print("🟢 Build classifier PI")
-Z_validation_PI = encoder_PI.predict(X_validation_PI)
+    if args.plot_tsne == True:
+        print("🟢 Latent Space t-SNE plots")
+        z_PI = get_latent(encoder_PI, X_train_PI)
+        z_M  = get_latent(encoder_M, X_train_M)
 
-clf_PI = LogisticRegression(max_iter=1000)
-clf_PI.fit(Z_validation_PI, y_validation)
+        Z_PI_tsne = compute_tsne(z_PI)
+        Z_M_tsne  = compute_tsne(z_M)
 
-print("🟢 Build classifier M")
-Z_validation_M = encoder_M.predict(X_validation_M)
+        plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
+        plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
 
-clf_M = LogisticRegression(max_iter=1000)
-clf_M.fit(Z_validation_M, y_validation)
+    print("🟢 Build classifier PI")
+    Z_validation_PI = encoder_PI.predict(X_validation_PI)
 
-print("🟢 Build gate validation datasets")
-X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
-y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
+    clf_PI = LogisticRegression(max_iter=1000)
+    clf_PI.fit(Z_validation_PI, y_validation)
 
-print("🟢 Training gate")
-gate = Pipeline([
-    ("scaler", StandardScaler()),
-    ("clf", LogisticRegression(
-        penalty="l2",
-        solver="lbfgs",
-        max_iter=1000
-    ))
-])
+    print("🟢 Validate classifier PI")
+    Z_test_PI = encoder_PI.predict(X_test_PI)
 
-gate.fit(X_gate_val, y_gate_val)
+    y_test_pred_PI = clf_PI.predict(Z_test_PI)
+    acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
+    f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
-print("🟢 Validate gate")
-Z_test_PI = encoder_PI.predict(X_test_PI)
-Z_test_M = encoder_M.predict(X_test_M)
+    expert_model_test_accuracies_PI.append(acc_score_test_PI)
+    expert_model_test_f1_scores_PI.append(f1_score_test_PI)
 
-X_gate_test = np.hstack([Z_test_PI, Z_test_M])
-y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
+    print("🟢 Build classifier M")
+    Z_validation_M = encoder_M.predict(X_validation_M)
 
-gate_pred = gate.predict(X_gate_test)
+    clf_M = LogisticRegression(max_iter=1000)
+    clf_M.fit(Z_validation_M, y_validation)
 
-gate_acc = (gate_pred == y_gate_test).mean()
-print("Gate accuracy:", gate_acc)
+    print("🟢 Validate classifier M")
+    Z_test_M = encoder_M.predict(X_test_M)
 
-print("🟢 Soft Validate MoE")
-p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+    y_test_pred_M = clf_M.predict(Z_test_M)
+    acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
+    f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
 
-y_pred_soft = p_final_soft.argmax(axis=1)
+    expert_model_test_accuracies_M.append(acc_score_test_M)
+    expert_model_test_f1_scores_M.append(f1_score_test_M)
 
-moe_acc_soft = accuracy_score(y_test, y_pred_soft)
-moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
-print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+    print("🟢 Build gate validation datasets")
+    X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
+    y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
 
-print("🟢 Hard Validate MoE")
-p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+    print("🟢 Training gate")
+    gate = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(
+            penalty="l2",
+            solver="lbfgs",
+            max_iter=1000
+        ))
+    ])
 
-y_pred_hard = p_final_hard.argmax(axis=1)
+    gate.fit(X_gate_val, y_gate_val)
 
-moe_acc_hard = accuracy_score(y_test, y_pred_hard)
-moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
-print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+    print("🟢 Validate gate")
+    Z_test_PI = encoder_PI.predict(X_test_PI)
+    Z_test_M = encoder_M.predict(X_test_M)
 
-print("🟢 Reconstruction plots")
-plot_reconstruction_error(autoencoder_PI, X_test_PI, "mse_AE_PI.png", "Reconstruction Error PI")
-plot_reconstruction_error(autoencoder_M, X_test_M, "mse_AE_M.png", "Reconstruction Error M")
+    X_gate_test = np.hstack([Z_test_PI, Z_test_M])
+    y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
 
-plot_ae_reconstruction(autoencoder_PI, X_test_PI, "reconstruction_AE_PI.png", n_samples=5, title="Samples AE Reconstruction PI")
-plot_ae_reconstruction(autoencoder_M, X_test_M, "reconstruction_AE_M.png", n_samples=5, title="Samples AE Reconstruction M")
+    gate_pred = gate.predict(X_gate_test)
 
-compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
+    gate_acc = (gate_pred == y_gate_test).mean()
+
+    gate_model_test_accuracies.append(gate_acc)
+    print("Gate accuracy:", gate_acc)
+
+    print("🟢 Soft Validate MoE")
+    p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+
+    y_pred_soft = p_final_soft.argmax(axis=1)
+
+    moe_acc_soft = accuracy_score(y_test, y_pred_soft)
+    moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
+
+    moe_model_test_soft_accuracies.append(moe_acc_soft)
+    moe_model_test_soft_f1_scores.append(moe_f1_weight_soft)
+
+    print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+
+    print("🟢 Hard Validate MoE")
+    p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+
+    y_pred_hard = p_final_hard.argmax(axis=1)
+
+    moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+    moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+
+    moe_model_test_hard_accuracies.append(moe_acc_soft)
+    moe_model_test_hard_f1_scores.append(moe_f1_weight_soft)
+
+    print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+
+    print("🟢 Reconstruction plots")
+    plot_reconstruction_error(autoencoder_PI, X_test_PI, "mse_AE_PI.png", "Reconstruction Error PI")
+    plot_reconstruction_error(autoencoder_M, X_test_M, "mse_AE_M.png", "Reconstruction Error M")
+
+    plot_ae_reconstruction(autoencoder_PI, X_test_PI, "reconstruction_AE_PI.png", n_samples=5, title="Samples AE Reconstruction PI")
+    plot_ae_reconstruction(autoencoder_M, X_test_M, "reconstruction_AE_M.png", n_samples=5, title="Samples AE Reconstruction M")
+
+    compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
+
+expert_model_test_accuracies_PI = []
+expert_model_test_f1_scores_PI = []
+expert_model_test_accuracies_M = []
+expert_model_test_f1_scores_M = []
+gate_model_test_accuracies = []
+moe_model_test_soft_accuracies = []
+moe_model_test_soft_f1_scores = []
+moe_model_test_hard_accuracies = []
+moe_model_test_hard_f1_scores = []
+
+print("🟢 Save metrics")
+df_metrics = pd.DataFrame({   
+    'loop': loops,
+    'expert_model_test_accuracy_PI': expert_model_test_accuracies_PI,
+    'expert_model_test_f1_score_PI': expert_model_test_f1_scores_PI,
+    'expert_model_test_accuracy_M': expert_model_test_accuracies_M,
+    'expert_model_test_f1_score_M': expert_model_test_f1_scores_M,
+    'gate_model_test_accuracy': gate_model_test_accuracies,
+    'moe_model_test_soft_accuracy': moe_model_test_soft_accuracies,
+    'moe_model_test_soft_f1_score': moe_model_test_soft_f1_scores,
+    'moe_model_test_hard_accuracy': moe_model_test_hard_accuracies,
+    'moe_model_test_hard_f1_score': moe_model_test_hard_f1_scores,
+})
+
+df_metrics.to_csv(str(Path.cwd()) + "/results/moe_ae_metrics.csv", index=False)     

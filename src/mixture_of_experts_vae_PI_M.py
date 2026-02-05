@@ -174,7 +174,15 @@ def parse_args(args):
         type=int,
         default=1,               
         help=f"Optimize hyperparameters num trials."        
-    )            
+    )
+    parser.add_argument(
+        '-plot-tsne',
+        '--plot-tsne',
+        dest='plot_tsne',
+        action='store_true',
+        default=False,
+        help="Plot laten t-SNE"
+    )                
     parser.add_argument(
         "-v",
         "--verbose",
@@ -625,14 +633,14 @@ print("Gate validation accuracy:", accuracy_score(y_gate_val, gate.predict(X_gat
 print("🟢 Build classifier PI")
 z_mean_PI, z_logvar_PI, z_sample_PI = encoder_PI(X_train_PI, training=False)
 
-classifier_PI = build_classifier(8, best_params_PI["latent_dim"], best_params_PI["hidden_dim"], name="classifier_PI")
+classifier_PI = build_classifier(len(ACTIVITIES), best_params_PI["latent_dim"], best_params_PI["hidden_dim"], name="classifier_PI")
 classifier_PI.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 classifier_PI.fit(z_sample_PI, y_train, epochs=20, batch_size=64)
 
 print("🟢 Build classifier M")
 z_mean_M, z_logvar_M, z_sample_M = encoder_M(X_train_M, training=False)
 
-classifier_M = build_classifier(8, best_params_M["latent_dim"], best_params_M["hidden_dim"], name="classifier_M")
+classifier_M = build_classifier(len(ACTIVITIES), best_params_M["latent_dim"], best_params_M["hidden_dim"], name="classifier_M")
 classifier_M.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 classifier_M.fit(z_sample_M, y_train, epochs=20, batch_size=64)
 
@@ -656,12 +664,13 @@ plot_vae_reconstruction(vae_M, X_test_M, "reconstruction_VAE_M.png", n_samples=5
 
 compare_reconstruction_errors(vae_PI, vae_M, X_test_PI, X_test_M, "compare_reconstruction_VAE_PI_M.png")
 
-print("🟢 Latent Space t-SNE plots")
-z_mu_PI, z_lv_PI = extract_latent_stats(encoder_PI, X_train_PI)
-z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
+if args.plot_tsne == True:
+    print("🟢 Latent Space t-SNE plots")
+    z_mu_PI, z_lv_PI = extract_latent_stats(encoder_PI, X_train_PI)
+    z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
 
-Z_PI_tsne = compute_tsne(z_mu_PI)
-Z_M_tsne  = compute_tsne(z_mu_M)
+    Z_PI_tsne = compute_tsne(z_mu_PI)
+    Z_M_tsne  = compute_tsne(z_mu_M)
 
-plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="VAE Latent Space (PI)", file_name="tsne_VAE_latent_PI.png")
-plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="VAE Latent Space (M)", file_name="tsne_VAE_latent_M.png")
+    plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="VAE Latent Space (PI)", file_name="tsne_VAE_latent_PI.png")
+    plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="VAE Latent Space (M)", file_name="tsne_VAE_latent_M.png")

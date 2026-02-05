@@ -74,7 +74,7 @@ MAPPING_CPA_METS = {
     'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
     'DE PIE USANDO PC': 'LIGHT-INTENSITY',
     'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
-    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY'
+    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY',
     
     # MODERATE-INTENSITY
     'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
@@ -123,9 +123,8 @@ def parse_args(args):
     parser.add_argument(
         "-superclases",
         "--superclases",
-        dest="superclases",       
-        required=True,        
-        help=f"Use Superclases: Captured24, WearablePerMed"
+        dest="superclases",    
+        help=f"Use Superclases: Captured24, CPA-METS"
     )     
     parser.add_argument(
         "-k-folds",
@@ -222,7 +221,7 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test 
 
-def base_kfold_cross_validation(X_train, y_train, m_train, k, is_random_state):
+def base_kfold_cross_validation(X_train, y_train, m_train, k):
     gkf = GroupKFold(n_splits=k)
 
     X_base_train = []
@@ -239,25 +238,14 @@ def base_kfold_cross_validation(X_train, y_train, m_train, k, is_random_state):
         y_training_fold, y_validation_fold = y_train[train_idx], y_train[val_idx]
 
         # Create k-fold model
-        if (is_random_state == True):
-          fold_model = RandomForestClassifier(
-                n_jobs=N_JOBS,        
-                n_estimators=N_ESTIMATORS,                     
-                max_depth=MAX_DEPTH,
-                max_features= MAX_FEATURES,                 
-                min_samples_split=MIN_SAMPLES_SPLIT,        
-                min_samples_leaf=MIN_SAMPLES_LEAF   
-            )
-        else:            
-            fold_model = RandomForestClassifier(
-                random_state=42,
-                n_jobs=N_JOBS,        
-                n_estimators=N_ESTIMATORS,                     
-                max_depth=MAX_DEPTH,
-                max_features= MAX_FEATURES,                 
-                min_samples_split=MIN_SAMPLES_SPLIT,        
-                min_samples_leaf=MIN_SAMPLES_LEAF   
-            )
+        fold_model = RandomForestClassifier(
+            n_jobs=N_JOBS,        
+            n_estimators=N_ESTIMATORS,                     
+            max_depth=MAX_DEPTH,
+            max_features= MAX_FEATURES,                 
+            min_samples_split=MIN_SAMPLES_SPLIT,        
+            min_samples_leaf=MIN_SAMPLES_LEAF   
+        )
 
         # Train k-fold model with k-fold datasets
         fold_model.fit(X_training_fold, y_training_fold)
@@ -294,25 +282,14 @@ def base_kfold_cross_validation(X_train, y_train, m_train, k, is_random_state):
     }
     
     # Create base model
-    if (is_random_state == True):
-        expert_model = RandomForestClassifier(
-            n_jobs=N_JOBS,        
-            n_estimators=N_ESTIMATORS,                     
-            max_depth=MAX_DEPTH, 
-            max_features= MAX_FEATURES,                
-            min_samples_split=MIN_SAMPLES_SPLIT,        
-            min_samples_leaf=MIN_SAMPLES_LEAF              
-        )   
-    else:
-        expert_model = RandomForestClassifier(
-            random_state=42,
-            n_jobs=N_JOBS,        
-            n_estimators=N_ESTIMATORS,                     
-            max_depth=MAX_DEPTH,
-            max_features= MAX_FEATURES,                 
-            min_samples_split=MIN_SAMPLES_SPLIT,        
-            min_samples_leaf=MIN_SAMPLES_LEAF
-        )
+    expert_model = RandomForestClassifier(
+        n_jobs=N_JOBS,        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH, 
+        max_features= MAX_FEATURES,                
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF              
+    )
 
     expert_model.fit(X_train, y_train)
 
@@ -389,11 +366,11 @@ for n_participants in range(args.step_init, len(participant_ids) + 1, args.step)
         print("\n")
 
         print("🟢 k-Fold train base model PI")
-        base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds, args.is_random_state)
+        base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
         print("\n")
 
         print("🟢 k-Fold train base model M")
-        base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds, args.is_random_state)
+        base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
         print("\n")
 
         print("🟢 Base predictions on training set for PI and M")
@@ -421,23 +398,13 @@ for n_participants in range(args.step_init, len(participant_ids) + 1, args.step)
 
         cv = GroupKFold(n_splits=5)
 
-        if (args.is_random_state == True):
-            grid = GridSearchCV(
-                pipe,
-                param_grid=param_grid,
-                cv=cv,
-                scoring="accuracy",
-                n_jobs=-1
-            )            
-        else:
-            grid = GridSearchCV(
-                pipe,
-                param_grid=param_grid,
-                cv=cv,
-                scoring="accuracy",
-                n_jobs=-1,
-                random_state=42
-            )  
+        grid = GridSearchCV(
+            pipe,
+            param_grid=param_grid,
+            cv=cv,
+            scoring="accuracy",
+            n_jobs=-1
+        ) 
 
         print("🟢 Train meta model with concatenated probability distribution from PI and M")
         grid.fit(stack_X_tr, y_train, groups=m_train)

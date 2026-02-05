@@ -128,7 +128,15 @@ def parse_args(args):
         type=int,
         default=1,               
         help=f"Optimize hyperparameters num trials."        
-    )               
+    )
+    parser.add_argument(
+        '-plot-tsne',
+        '--plot-tsne',
+        dest='plot_tsne',
+        action='store_true',
+        default=False,
+        help="Plot laten t-SNE"
+    )                   
     parser.add_argument(
         "-v",
         "--verbose",
@@ -515,15 +523,16 @@ mse_test_M  = np.mean(np.square(X_test_M - X_test_pred_M),  axis=1)
 print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
 print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
 
-print("🟢 Latent Space t-SNE plots")
-z_PI = get_latent(encoder_PI, X_train_PI)
-z_M  = get_latent(encoder_M, X_train_M)
+if args.plot_tsne == True:
+    print("🟢 Latent Space t-SNE plots")
+    z_PI = get_latent(encoder_PI, X_train_PI)
+    z_M  = get_latent(encoder_M, X_train_M)
 
-Z_PI_tsne = compute_tsne(z_PI)
-Z_M_tsne  = compute_tsne(z_M)
+    Z_PI_tsne = compute_tsne(z_PI)
+    Z_M_tsne  = compute_tsne(z_M)
 
-plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
-plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
+    plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
+    plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
 
 print("🟢 Build classifier PI")
 Z_validation_PI = encoder_PI.predict(X_validation_PI)

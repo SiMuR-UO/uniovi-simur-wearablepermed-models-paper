@@ -2,6 +2,8 @@ import sys
 import argparse
 import logging
 import numpy as np
+import pandas as pd
+from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -128,7 +130,15 @@ def parse_args(args):
         type=int,
         default=3,       
         help=f"k-Folds for train."
-    )                
+    )
+    parser.add_argument(
+        "-loops",
+        "--loops",
+        dest="loops",        
+        type=int,        
+        default=30,        
+        help="Number of loops."
+    )               
     parser.add_argument(
         "-v",
         "--verbose",
@@ -386,6 +396,10 @@ elif (args.superclases == "CPA-METS"):
     ACTIVITIES = SUPERCLASES_CPA_METS
     (y_data) = superclases_cpa_mets(y_data)
 
+participant_ids = np.sort(np.unique(m_data))
+
+print("Total participants:", len(participant_ids))
+
 print("🟢 Normalize PI and M Datasets") 
 sc = StandardScaler()
 
@@ -397,54 +411,138 @@ print("🟢 Split Dataset (Training/Validation/Test)")
  y_train, y_validation, y_test,
  m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
 
-print("🟢 k-Fold validation and train expert model PI")
-expert_PI, metrics_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
-print("\n")
+loops = []
 
-print("🟢 k-Fold validation and train expert model M")
-expert_M, metrics_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
-print("\n")
+# sensor metrics
+base_model_train_accuracies_PI = []
+base_model_train_f1_scores_PI = []
+base_model_validate_accuracies_PI = []
+base_model_validate_f1_scores_PI = []
+base_model_train_accuracies_M = []
+base_model_train_f1_scores_M = []
+base_model_validate_accuracies_M = []
+base_model_validate_f1_scores_M = []
 
-print("🟢 Build gate validation datasets")
-X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
+# gate metrics
+gate_accs = []
+gate_f1_weights = []
 
-print("🟢 Training gate")
-gate = Pipeline([
-    ("scaler", StandardScaler()),
-    ("clf", LogisticRegression(
-        penalty="l2",
-        solver="lbfgs",
-        max_iter=1000
-    ))
-])
+# moe metrics
+moe_acc_softs = []
+moe_f1_weight_softs = []
+moe_acc_hards = []
+moe_f1_weight_hards = []
 
-gate.fit(X_gate_val, y_gate_val)
+for loop in range(args.loops):
+    print("🔵 Loop: " + str(loop))
+    loops.append(loop)
 
-print("🟢 Validate gate")
-X_gate_test = np.hstack([X_test_PI, X_test_M])
-y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
+    print("🟢 k-Fold validation and train expert model PI")
+    expert_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
+    print("\n")
 
-gate_pred = gate.predict(X_gate_test)
+    # append PI metrics
+    base_model_train_accuracies_PI.append(
+        metric_PI["base_model_accuracy_train_mean"]
+    )
+    base_model_train_f1_scores_PI.append(
+        metric_PI["base_model_f1_train_mean"]
+    )
+    base_model_validate_accuracies_PI.append(
+        metric_PI["base_model_accuracy_validate_mean"]
+    )
+    base_model_validate_f1_scores_PI.append(
+        metric_PI["base_model_f1_validate_mean"]
+    )
 
-gate_acc = accuracy_score(y_gate_test, gate_pred)
-gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
-print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
+    print("🟢 k-Fold validation and train expert model M")
+    expert_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
+    print("\n")
 
-print("🟢 Soft Validate MoE")
-p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
+    # append M metrics
+    base_model_train_accuracies_M.append(
+        metric_M["base_model_accuracy_train_mean"]
+    )
+    base_model_train_f1_scores_M.append(
+        metric_M["base_model_f1_train_mean"]
+    )
+    base_model_validate_accuracies_M.append(
+        metric_M["base_model_accuracy_validate_mean"]
+    )
+    base_model_validate_f1_scores_M.append(
+        metric_M["base_model_f1_validate_mean"]
+    )
 
-y_pred_soft = p_final_soft.argmax(axis=1)
+    print("🟢 Build gate validation datasets")
+    X_gate_val = np.hstack([X_validation_PI, X_validation_M])
+    y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
 
-moe_acc_soft = accuracy_score(y_test, y_pred_soft)
-moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
-print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+    print("🟢 Training gate")
+    gate = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(
+            penalty="l2",
+            solver="lbfgs",
+            max_iter=1000
+        ))
+    ])
 
-print("🟢 Hard Validate MoE")
-p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
+    gate.fit(X_gate_val, y_gate_val)
 
-y_pred_hard = p_final_hard.argmax(axis=1)
+    print("🟢 Validate gate")
+    X_gate_test = np.hstack([X_test_PI, X_test_M])
+    y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
 
-moe_acc_hard = accuracy_score(y_test, y_pred_hard)
-moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
-print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+    gate_pred = gate.predict(X_gate_test)
+
+    gate_acc = accuracy_score(y_gate_test, gate_pred)
+    gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
+    print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
+
+    gate_accs.append(gate_acc)
+    gate_f1_weights.append(gate_f1_weight)
+
+    print("🟢 Soft Validate MoE")
+    p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
+
+    y_pred_soft = p_final_soft.argmax(axis=1)
+
+    moe_acc_soft = accuracy_score(y_test, y_pred_soft)
+    moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
+    print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+
+    print("🟢 Hard Validate MoE")
+    p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
+
+    y_pred_hard = p_final_hard.argmax(axis=1)
+
+    moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+    moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+    print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+
+    moe_acc_softs.append(moe_acc_soft)
+    moe_f1_weight_softs.append(moe_f1_weight_soft)
+    moe_acc_hards.append(moe_acc_hard)
+    moe_f1_weight_hards.append(moe_f1_weight_hard)
+
+
+print("🟢 Save metrics")
+df_metrics = pd.DataFrame({   
+    'loop': loops,
+    'base_model_train_accuracy_PI': base_model_train_accuracies_PI,
+    'base_model_train_f1_score_PI': base_model_train_f1_scores_PI,
+    'base_model_validate_accuracy_PI': base_model_validate_accuracies_PI,
+    'base_model_validate_f1_score_PI': base_model_validate_f1_scores_PI,
+    'base_model_train_accuracy_M': base_model_train_accuracies_M,
+    'base_model_train_f1_score_M': base_model_train_f1_scores_M,
+    'base_model_validate_accuracy_M': base_model_validate_accuracies_M,
+    'base_model_validate_f1_score_M': base_model_validate_f1_scores_M,
+    'gate_acc': gate_accs,
+    'bgate_f1_weight': gate_f1_weights,
+    'moe_acc_soft': moe_acc_softs,
+    'moe_f1_weight_soft': moe_f1_weight_softs,
+    'moe_acc_hard': moe_acc_hards,
+    'moe_f1_weight_hard': moe_f1_weight_hards
+})
+
+df_metrics.to_csv(str(Path.cwd()) + "/results/moe_rf_metrics.csv", index=False)    

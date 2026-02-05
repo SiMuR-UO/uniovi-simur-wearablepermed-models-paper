@@ -14,11 +14,11 @@
 
             // Stacking with two Random Forest base models: stacking_rf_PI_M.py
             "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
-            //"--superclases", "CPA-METS",
+            "--superclases", "Captured24",
             "--k-folds", "3",
             "--step-init", "60",
             "--step", "1",
-            "--loops", "1",
+            "--loops", "30",
 
             // MoE with two Random Forest experts: mixture_of_experts_rf_PI_M.py 
             //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",

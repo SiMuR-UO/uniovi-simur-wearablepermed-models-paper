@@ -342,7 +342,7 @@ for n_participants in range(args.step_init, len(participant_ids) + 1, args.step)
     # select first n participants
     selected_participants = participant_ids[:n_participants]
 
-    # rows belonging to those participants
+    # rows belonging to selected participants
     mask = np.isin(m_data, selected_participants)
 
     for loop in range(args.loops):

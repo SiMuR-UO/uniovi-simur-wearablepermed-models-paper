@@ -27,34 +27,6 @@ SUPERCLASES_CAPTURED24 = sorted(['WALKING', 'HOUSEHOLD-CHORES',
                                  'STANDING', 'SLEEP', 'BICYCLING',
                                  'SITTING', 'MIXED-ACTIVITY', 'SPORTS'])
 
-SUPERCLASES_WEARABLEPERMED = sorted(['SEDENTARY', 'LIGHT-INTENSITY',
-                                     'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY'])
-
-MAPPING_WEARABLEPERMED = {
-    # SEDENTARY
-    'FASE REPOSO CON K5': 'SEDENTARY',
-    'SENTADO LEYENDO': 'SEDENTARY',
-    'SENTADO USANDO PC': 'SEDENTARY',
-    'SENTADO VIENDO LA TV': 'SEDENTARY',
-
-    # LIGHT
-    'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
-    'DE PIE USANDO PC': 'LIGHT-INTENSITY',
-    'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
-    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY',
-
-    # MODERATE
-    'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
-    'DE PIE MOVIENDO LIBROS': 'MODERATE-INTENSITY',
-    'CAMINAR CON LA COMPRA': 'MODERATE-INTENSITY',
-    'CAMINAR USUAL SPEED': 'MODERATE-INTENSITY',
-    'SUBIR Y BAJAR ESCALERAS': 'MODERATE-INTENSITY',
-
-    # VIGOROUS
-    'INCREMENTAL CICLOERGOMETRO': 'VIGOROUS-INTENSITY',
-    'TROTAR': 'VIGOROUS-INTENSITY'
-}
-
 MAPPING_CAPTURED24 = {
     # WALKING
     'CAMINAR CON MÓVIL O LIBRO': 'WALKING',
@@ -86,6 +58,34 @@ MAPPING_CAPTURED24 = {
 
     # SPORTS
     'TROTAR': 'SPORTS',
+}
+
+SUPERCLASES_CPA_METS = ['SEDENTARY', 'LIGHT-INTENSITY',
+                        'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY']
+
+MAPPING_CPA_METS = {
+    # SEDENTARY
+    'FASE REPOSO CON K5': 'SEDENTARY',
+    'SENTADO LEYENDO': 'SEDENTARY',
+    'SENTADO USANDO PC': 'SEDENTARY',
+    'SENTADO VIENDO LA TV': 'SEDENTARY',    
+
+    # LIGHT-INTENSITY
+    'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
+    'DE PIE USANDO PC': 'LIGHT-INTENSITY',
+    'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
+    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY'
+    
+    # MODERATE-INTENSITY
+    'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
+    'DE PIE MOVIENDO LIBROS': 'MODERATE-INTENSITY',
+    'CAMINAR CON LA COMPRA': 'MODERATE-INTENSITY',
+    'CAMINAR USUAL SPEED': 'MODERATE-INTENSITY',
+    'SUBIR Y BAJAR ESCALERAS': 'MODERATE-INTENSITY',
+
+    # VIGOROUS-INTENSITY
+    'INCREMENTAL CICLOERGOMETRO': 'VIGOROUS-INTENSITY',  
+    'TROTAR': 'VIGOROUS-INTENSITY' 
 }
 
 WINDOW_DATA = "arr_0"
@@ -158,14 +158,7 @@ def parse_args(args):
         type=int,        
         default=30,        
         help="Number of loops."
-    )
-    parser.add_argument(
-        "-is-random-state",
-        "--is-random-state",
-        dest="is_random_state",
-        action='store_true',
-        help="activate random state."
-    )                            
+    )                           
     parser.add_argument(
         "-v",
         "--verbose",
@@ -194,8 +187,8 @@ def pretreatment(y_data):
 def superclases_captured24(y_data):
     return np.array([MAPPING_CAPTURED24.get(label, "UNKNOWN") for label in y_data])
 
-def superclases_wearablepermed(y_data):
-    return np.array([MAPPING_WEARABLEPERMED.get(label, "UNKNOWN") for label in y_data])
+def superclases_cpa_mets(y_data):
+    return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     # split concatate dataset between train and test
@@ -364,9 +357,9 @@ print("🟢 Superclasses from PI and M Datasets")
 if (args.superclases == "Captured24"):
     ACTIVITIES = SUPERCLASES_CAPTURED24
     (y_data) = superclases_captured24(y_data)    
-else:
-    ACTIVITIES = SUPERCLASES_WEARABLEPERMED
-    (y_data) = superclases_wearablepermed(y_data)
+elif (args.superclases == "CPA-METS"):
+    ACTIVITIES = SUPERCLASES_CPA_METS
+    (y_data) = superclases_cpa_mets(y_data)
 
 participant_ids = np.sort(np.unique(m_data))
 

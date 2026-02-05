@@ -8,7 +8,7 @@ import optuna
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
 import tensorflow as tf
@@ -62,6 +62,34 @@ MAPPING_CAPTURED24 = {
 
     # SPORTS
     'TROTAR': 'SPORTS',
+}
+
+SUPERCLASES_CPA_METS = ['SEDENTARY', 'LIGHT-INTENSITY',
+                        'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY']
+                        
+MAPPING_CPA_METS = {
+    # SEDENTARY
+    'FASE REPOSO CON K5': 'SEDENTARY',
+    'SENTADO LEYENDO': 'SEDENTARY',
+    'SENTADO USANDO PC': 'SEDENTARY',
+    'SENTADO VIENDO LA TV': 'SEDENTARY',    
+
+    # LIGHT-INTENSITY
+    'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
+    'DE PIE USANDO PC': 'LIGHT-INTENSITY',
+    'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
+    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY',
+    
+    # MODERATE-INTENSITY
+    'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
+    'DE PIE MOVIENDO LIBROS': 'MODERATE-INTENSITY',
+    'CAMINAR CON LA COMPRA': 'MODERATE-INTENSITY',
+    'CAMINAR USUAL SPEED': 'MODERATE-INTENSITY',
+    'SUBIR Y BAJAR ESCALERAS': 'MODERATE-INTENSITY',
+
+    # VIGOROUS-INTENSITY
+    'INCREMENTAL CICLOERGOMETRO': 'VIGOROUS-INTENSITY',  
+    'TROTAR': 'VIGOROUS-INTENSITY' 
 }
 
 WINDOW_DATA = "arr_0"
@@ -134,6 +162,12 @@ def parse_args(args):
         help=f"Participant stack data."        
     )
     parser.add_argument(
+        "-superclases",
+        "--superclases",
+        dest="superclases",        
+        help=f"Use Superclases: Captured24, CPA-METS"
+    )    
+    parser.add_argument(
         "-optimize-trials",
         "--optimize-trials",               
         dest="optimize_trials",
@@ -169,7 +203,10 @@ def pretreatment(y_data):
 def superclases_captured24(y_data):
     return np.array([MAPPING_CAPTURED24.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, , val_size=0.2, test_size=0.1):
+def superclases_cpa_mets(y_data):
+    return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
+
+def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
     # Transporm string labels to numbers
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
@@ -472,8 +509,12 @@ m_data = np.delete(m_data_all, indices_to_remove, axis=0)
 
 # Superclasses from PI and M
 print("🟢 Superclasses from PI and M Datasets")
-ACTIVITIES = SUPERCLASES_CAPTURED24
-(y_data) = superclases_captured24(y_data)
+if (args.superclases == "Captured24"):
+    ACTIVITIES = SUPERCLASES_CAPTURED24
+    (y_data) = superclases_captured24(y_data)    
+elif (args.superclases == "CPA-METS"):
+    ACTIVITIES = SUPERCLASES_CPA_METS
+    (y_data) = superclases_cpa_mets(y_data)
 
 print("🟢 Normalize PI and M Datasets") 
 sc = StandardScaler()
@@ -595,11 +636,16 @@ classifier_M = build_classifier(8, best_params_M["latent_dim"], best_params_M["h
 classifier_M.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 classifier_M.fit(z_sample_M, y_train, epochs=20, batch_size=64)
 
-print("🟢 MoE evaluation")
-y_soft, y_hard, p_soft, p_hard = moe_predict(X_test_PI, X_test_M, encoder_PI, classifier_PI, encoder_M, classifier_M, gate)
+print("🟢 MoE validation")
+y_pred_soft, y_pred_hard, p_soft, p_hard = moe_predict(X_test_PI, X_test_M, encoder_PI, classifier_PI, encoder_M, classifier_M, gate)
 
-print("Soft MoE accuracy:", accuracy_score(y_test, y_soft))
-print("Hard MoE accuracy:", accuracy_score(y_test, y_hard))
+moe_acc_soft = accuracy_score(y_test, y_pred_soft)
+moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
+print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+
+moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
 print("🟢 Reconstruction plots")
 plot_reconstruction_error(vae_PI, X_test_PI, "mse_VAE_PI.png", "Reconstruction Error PI")

@@ -11,12 +11,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 ACTIVITIES = ['FASE REPOSO CON K5', 'TAPIZ RODANTE',
-                     'INCREMENTAL CICLOERGOMETRO', 'YOGA', 'SENTADO VIENDO LA TV',
-                     'SENTADO LEYENDO', 'SENTADO USANDO PC', 'DE PIE USANDO PC',
-                     'DE PIE DOBLANDO TOALLAS', 'DE PIE MOVIENDO LIBROS',
-                     'DE PIE BARRIENDO', 'CAMINAR USUAL SPEED',
-                     'CAMINAR CON MÓVIL O LIBRO', 'CAMINAR CON LA COMPRA',
-                     'CAMINAR ZIGZAG', 'TROTAR', 'SUBIR Y BAJAR ESCALERAS']
+              'INCREMENTAL CICLOERGOMETRO', 'YOGA', 'SENTADO VIENDO LA TV',
+              'SENTADO LEYENDO', 'SENTADO USANDO PC', 'DE PIE USANDO PC',
+              'DE PIE DOBLANDO TOALLAS', 'DE PIE MOVIENDO LIBROS',
+              'DE PIE BARRIENDO', 'CAMINAR USUAL SPEED',
+              'CAMINAR CON MÓVIL O LIBRO', 'CAMINAR CON LA COMPRA',
+              'CAMINAR ZIGZAG', 'TROTAR', 'SUBIR Y BAJAR ESCALERAS']
 
 ACTIVITIES_TO_BE_REMOVED=['TAPIZ RODANTE', 'YOGA']
 
@@ -57,6 +57,34 @@ MAPPING_CAPTURED24 = {
     'TROTAR': 'SPORTS',
 }
 
+SUPERCLASES_CPA_METS = ['SEDENTARY', 'LIGHT-INTENSITY',
+                        'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY']
+
+MAPPING_CPA_METS = {
+    # SEDENTARY
+    'FASE REPOSO CON K5': 'SEDENTARY',
+    'SENTADO LEYENDO': 'SEDENTARY',
+    'SENTADO USANDO PC': 'SEDENTARY',
+    'SENTADO VIENDO LA TV': 'SEDENTARY',    
+
+    # LIGHT-INTENSITY
+    'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
+    'DE PIE USANDO PC': 'LIGHT-INTENSITY',
+    'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
+    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY',
+    
+    # MODERATE-INTENSITY
+    'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
+    'DE PIE MOVIENDO LIBROS': 'MODERATE-INTENSITY',
+    'CAMINAR CON LA COMPRA': 'MODERATE-INTENSITY',
+    'CAMINAR USUAL SPEED': 'MODERATE-INTENSITY',
+    'SUBIR Y BAJAR ESCALERAS': 'MODERATE-INTENSITY',
+
+    # VIGOROUS-INTENSITY
+    'INCREMENTAL CICLOERGOMETRO': 'VIGOROUS-INTENSITY',  
+    'TROTAR': 'VIGOROUS-INTENSITY' 
+}
+
 WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
@@ -87,6 +115,12 @@ def parse_args(args):
         required=True,        
         help=f"Participant stack data."        
     )
+    parser.add_argument(
+        "-superclases",
+        "--superclases",
+        dest="superclases",        
+        help=f"Use Superclases: Captured24, CPA-METS"
+    )    
     parser.add_argument(
         "-k-folds",
         "--k-folds",
@@ -122,6 +156,9 @@ def pretreatment(y_data):
 
 def superclases_captured24(y_data):
     return np.array([MAPPING_CAPTURED24.get(label, "UNKNOWN") for label in y_data])
+
+def superclases_cpa_mets(y_data):
+    return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
     # Transporm string labels to numbers
@@ -342,8 +379,12 @@ y_data = np.delete(y_data_all, indices_to_remove, axis=0)
 m_data = np.delete(m_data_all, indices_to_remove, axis=0)
 
 print("🟢 Regroup in superclasses from PI and M Datasets")
-ACTIVITIES = SUPERCLASES_CAPTURED24
-(y_data) = superclases_captured24(y_data)
+if (args.superclases == "Captured24"):
+    ACTIVITIES = SUPERCLASES_CAPTURED24
+    (y_data) = superclases_captured24(y_data)    
+elif (args.superclases == "CPA-METS"):
+    ACTIVITIES = SUPERCLASES_CPA_METS
+    (y_data) = superclases_cpa_mets(y_data)
 
 print("🟢 Normalize PI and M Datasets") 
 sc = StandardScaler()
@@ -386,21 +427,24 @@ y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test
 
 gate_pred = gate.predict(X_gate_test)
 
-gate_acc = (gate_pred == y_gate_test).mean()
-print("Gate accuracy:", gate_acc)
+gate_acc = accuracy_score(y_gate_test, gate_pred)
+gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
+print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
 
 print("🟢 Soft Validate MoE")
 p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
 
 y_pred_soft = p_final_soft.argmax(axis=1)
 
-accuracy_soft = (y_pred_soft == y_test).mean()
-print("Soft MoE accuracy:", accuracy_soft)
+moe_acc_soft = accuracy_score(y_test, y_pred_soft)
+moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
+print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
 print("🟢 Hard Validate MoE")
 p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
 
 y_pred_hard = p_final_hard.argmax(axis=1)
 
-accuracy_hard = (y_pred_hard == y_test).mean()
-print("Hard MoE accuracy:", accuracy_hard)
+moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")

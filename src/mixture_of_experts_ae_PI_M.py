@@ -9,7 +9,7 @@ from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score,f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
 from tensorflow.keras import layers, models, regularizers
@@ -64,6 +64,34 @@ MAPPING_CAPTURED24 = {
     'TROTAR': 'SPORTS',
 }
 
+SUPERCLASES_CPA_METS = ['SEDENTARY', 'LIGHT-INTENSITY',
+                        'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY']
+
+MAPPING_CPA_METS = {
+    # SEDENTARY
+    'FASE REPOSO CON K5': 'SEDENTARY',
+    'SENTADO LEYENDO': 'SEDENTARY',
+    'SENTADO USANDO PC': 'SEDENTARY',
+    'SENTADO VIENDO LA TV': 'SEDENTARY',    
+
+    # LIGHT-INTENSITY
+    'DE PIE DOBLANDO TOALLAS': 'LIGHT-INTENSITY',
+    'DE PIE USANDO PC': 'LIGHT-INTENSITY',
+    'CAMINAR CON MÓVIL O LIBRO': 'LIGHT-INTENSITY',
+    'CAMINAR ZIGZAG': 'LIGHT-INTENSITY',
+    
+    # MODERATE-INTENSITY
+    'DE PIE BARRIENDO': 'MODERATE-INTENSITY',
+    'DE PIE MOVIENDO LIBROS': 'MODERATE-INTENSITY',
+    'CAMINAR CON LA COMPRA': 'MODERATE-INTENSITY',
+    'CAMINAR USUAL SPEED': 'MODERATE-INTENSITY',
+    'SUBIR Y BAJAR ESCALERAS': 'MODERATE-INTENSITY',
+
+    # VIGOROUS-INTENSITY
+    'INCREMENTAL CICLOERGOMETRO': 'VIGOROUS-INTENSITY',  
+    'TROTAR': 'VIGOROUS-INTENSITY' 
+}
+
 WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
@@ -86,7 +114,13 @@ def parse_args(args):
         required=True,        
         dest="stack_all",       
         help=f"Participant stack data."        
-    ) 
+    )
+    parser.add_argument(
+        "-superclases",
+        "--superclases",
+        dest="superclases",        
+        help=f"Use Superclases: Captured24, CPA-METS"
+    )    
     parser.add_argument(
         "-optimize-trials",
         "--optimize-trials",               
@@ -122,6 +156,9 @@ def pretreatment(y_data):
 
 def superclases_captured24(y_data):
     return np.array([MAPPING_CAPTURED24.get(label, "UNKNOWN") for label in y_data])
+
+def superclases_cpa_mets(y_data):
+    return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
     # Transporm string labels to numbers
@@ -210,76 +247,64 @@ def objective(trial, X_train, X_validation):
 
     return min(history.history["val_loss"])
 
-def entropy(p, eps=1e-12):
-    p = np.clip(p, eps, 1.0)
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+    p_PI_val = expert_PI.predict_proba(X_PI)
+    p_M_val = expert_M.predict_proba(X_M)
 
-    return -np.sum(p * np.log(p), axis=1)
+    # Per-sample correctness
+    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
+    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
 
-def max_prob(p):
-    return np.max(p, axis=1)
+    conf_PI = p_PI_val.max(axis=1)
+    conf_M = p_M_val.max(axis=1)
 
-def margin(p):
-    # diferencia entre la probabilidad mayor y la segunda mayor
-    part = np.partition(-p, 1, axis=1)
-    p1 = -part[:, 0]
-    p2 = -part[:, 1]
+    gate_y = np.zeros_like(y)
 
-    return p1 - p2
+    mask_PI = (correct_PI == 1) & (correct_M == 0)
+    gate_y[mask_PI] = 1
 
-def build_gate_features(p_PI, p_M):
-    H_PI = entropy(p_PI)
-    H_M = entropy(p_M)
+    mask_M = (correct_M == 1) & (correct_PI == 0)
+    gate_y[mask_M] = 0
 
-    # normalización de entropía
-    K = p_PI.shape[1]
-    H_PI /= np.log(K)
-    H_M /= np.log(K)
+    mask_tie = (correct_PI == correct_M)
+    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
 
-    pmax_PI = max_prob(p_PI)
-    pmax_M = max_prob(p_M)
+    return gate_y
 
-    m_PI = margin(p_PI)
-    m_M = margin(p_M)
+def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N,8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
 
-    X_gate = np.column_stack([
-        H_PI, pmax_PI, m_PI,
-        H_M, pmax_M, m_M,
-        H_PI - H_M,
-        pmax_PI - pmax_M,
-        m_PI - m_M
-    ])
+    # Gate probabilities prediction (N,2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
 
-    return X_gate
+    # Extract expert weights (N, 1)
+    w_PI = w[:, 1].reshape(-1, 1)
+    w_M = w[:, 0].reshape(-1, 1)
 
-def build_gate_router(p_PI, p_M, y_true, clf_PI, clf_M):
-    y_hat_PI = clf_PI.classes_[np.argmax(p_PI, axis=1)]
-    y_hat_M = clf_M.classes_[np.argmax(p_M, axis=1)]
+    # Weighted mixture
+    return w_PI * p_test_PI + w_M * p_test_M
 
-    correct_PI = (y_hat_PI == y_true)
-    correct_M  = (y_hat_M  == y_true)
+def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N, 8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
 
-    y_gate = np.full(len(y_true), -1)
+    # Gate probabilities prediction (N, 2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
 
-    y_gate[(correct_PI) & (~correct_M)] = 0
-    y_gate[(~correct_PI) & (correct_M)] = 1
+    # Choose expert per sample (top-1)
+    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
 
-    both = correct_PI & correct_M
-    y_gate[both] = (
-        max_prob(p_M[both]) > max_prob(p_PI[both])
-    ).astype(int)
+    # Allocate output
+    p_final = np.zeros_like(p_test_PI)
 
-    mask = y_gate != -1
+    # Fill per-sample
+    p_final[choose_PI] = p_test_PI[choose_PI]
+    p_final[~choose_PI] = p_test_M[~choose_PI]
 
-    return y_gate[mask], mask
-
-def gated_prediction(p_PI, p_M, gate, X_gate, clf_PI, clf_M):
-    gate_choice = gate.predict(X_gate)
-    
-    # convert argmax to real classes
-    y_hat_PI = clf_PI.classes_[np.argmax(p_PI, axis=1)]
-    y_hat_M  = clf_M.classes_[np.argmax(p_M, axis=1)]
-
-    return np.where(gate_choice == 0, y_hat_PI, y_hat_M)
+    return p_final
 
 def plot_reconstruction_error(ae, X, file_name, title="Reconstruction Error"):
     X_hat = ae.predict(X)
@@ -417,8 +442,12 @@ m_data = np.delete(m_data_all, indices_to_remove, axis=0)
 
 # Superclasses from PI and M
 print("🟢 Regroup in superclasses from PI and M Datasets")
-ACTIVITIES = SUPERCLASES_CAPTURED24
-(y_data) = superclases_captured24(y_data)
+if (args.superclases == "Captured24"):
+    ACTIVITIES = SUPERCLASES_CAPTURED24
+    (y_data) = superclases_captured24(y_data)    
+elif (args.superclases == "CPA-METS"):
+    ACTIVITIES = SUPERCLASES_CPA_METS
+    (y_data) = superclases_cpa_mets(y_data)
 
 print("🟢 Normalize PI and M Datasets") 
 sc = StandardScaler()
@@ -496,41 +525,23 @@ Z_M_tsne  = compute_tsne(z_M)
 plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
 plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
 
-print("🟢 Concatenate label") 
-y_data = np.concatenate((y_train, y_validation, y_test), axis=0)
+print("🟢 Build classifier PI")
+Z_validation_PI = encoder_PI.predict(X_validation_PI)
 
-print("🟢 Extract Latent Features for PI") 
-X_data_PI = np.concatenate((X_train_PI, X_validation_PI, X_test_PI), axis=0)
-Z_data_PI = encoder_PI.predict(X_data_PI)
-
-print("🟢 Extract Latent Features for M")
-X_data_M = np.concatenate((X_train_M, X_validation_M, X_test_M), axis=0)
-Z_data_M = encoder_M.predict(X_data_M)
-
-print("🟢 Get probability distribution from a Logistic Regression for PI")
 clf_PI = LogisticRegression(max_iter=1000)
-clf_PI.fit(Z_data_PI, y_data)
+clf_PI.fit(Z_validation_PI, y_validation)
 
-p_data_PI = clf_PI.predict_proba(Z_data_PI)
+print("🟢 Build classifier M")
+Z_validation_M = encoder_M.predict(X_validation_M)
 
-print("🟢 Get probability distribution from a Logistic Regression for M")
 clf_M = LogisticRegression(max_iter=1000)
-clf_M.fit(Z_data_M, y_data)
+clf_M.fit(Z_validation_M, y_validation)
 
-p_data_M = clf_M.predict_proba(Z_data_M)
+print("🟢 Build gate validation datasets")
+X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
+y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
 
-print("🟢 Build Gate features: Entropy, maxP, margin p and differences from PI and M probability distribution")
-X_gate = build_gate_features(p_data_PI, p_data_M)
-
-print("🟢 Create Gate Router")
-y_gate, mask = build_gate_router(p_data_PI, p_data_M, y_data, clf_PI, clf_M)
-
-X_gate = X_gate[mask]
-
-print("🟢 Split Gate Dataset")
-X_train, X_test, y_train, y_test = train_test_split(X_gate, y_gate, test_size=0.2, random_state=42)
-
-print("🟢 Model Gate Pipeline")
+print("🟢 Training gate")
 gate = Pipeline([
     ("scaler", StandardScaler()),
     ("clf", LogisticRegression(
@@ -540,32 +551,37 @@ gate = Pipeline([
     ))
 ])
 
-gate.fit(X_train, y_train)
+gate.fit(X_gate_val, y_gate_val)
 
-print("🟢 Gate evaluation")
-y_pred = gate.predict(X_test)
-print("Gate accuracy:", accuracy_score(y_test, y_pred))
+print("🟢 Validate gate")
+Z_test_PI = encoder_PI.predict(X_test_PI)
+Z_test_M = encoder_M.predict(X_test_M)
 
-print("🟢 Moe evaluation")
-y_gated = gated_prediction(p_data_PI[mask], p_data_M[mask], gate, X_gate, clf_PI, clf_M)
-print("MoE accuracy:", accuracy_score(y_data[mask], y_gated))
+X_gate_test = np.hstack([Z_test_PI, Z_test_M])
+y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
 
-print("🟢 Debug and Interpretation")
-clf = gate.named_steps["clf"]
-for name, coef in zip(
-    ["H1", "pmax1", "m1", "H2", "pmax2", "m2",
-     "ΔH", "Δpmax", "Δm"],
-    clf.coef_[0]
-):
-    print(f"{name:8s}: {coef:+.3f}")
+gate_pred = gate.predict(X_gate_test)
 
-print("🟢 Baseline without gate")
-best_single = max(
-    accuracy_score(y_data, clf_PI.classes_[np.argmax(p_data_PI, axis=1)]),
-    accuracy_score(y_data, clf_M.classes_[np.argmax(p_data_M, axis=1)])
-)
+gate_acc = (gate_pred == y_gate_test).mean()
+print("Gate accuracy:", gate_acc)
 
-print("Best single expert:", best_single)
+print("🟢 Soft Validate MoE")
+p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+
+y_pred_soft = p_final_soft.argmax(axis=1)
+
+moe_acc_soft = accuracy_score(y_test, y_pred_soft)
+moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
+print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+
+print("🟢 Hard Validate MoE")
+p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+
+y_pred_hard = p_final_hard.argmax(axis=1)
+
+moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
 print("🟢 Reconstruction plots")
 plot_reconstruction_error(autoencoder_PI, X_test_PI, "mse_AE_PI.png", "Reconstruction Error PI")

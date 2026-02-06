@@ -236,8 +236,10 @@ def model_kfold_cross_validate(X_train, y_train, m_train, k):
     # cross validation time tracking
     elapsed_cross = time.perf_counter() - start_cross
     print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
-    
+
     return model, metrics        
+
+start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
 
@@ -276,11 +278,10 @@ model_train_f1_scores = []
 model_test_accuracies = []
 model_test_f1_scores = []
 
-start_app = time.perf_counter()
-
 for loop in range(args.loops):
-    print("🔵 Loop: " + str(loop))
     start_loop = time.perf_counter()
+        
+    print("🔵 Loop: " + str(loop))
 
     print("🟢 Split dataset PI+M")
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)

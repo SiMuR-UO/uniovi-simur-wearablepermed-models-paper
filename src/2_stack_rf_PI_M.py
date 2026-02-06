@@ -1,4 +1,5 @@
 import sys
+import time
 import argparse
 import logging
 from pathlib import Path
@@ -7,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, GroupKFold
+from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -97,7 +98,6 @@ MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve th
 MAX_FEATURES=0.2
 MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-N_JOBS=-1
 
 metrics = []
 
@@ -157,7 +157,15 @@ def parse_args(args):
         type=int,        
         default=30,        
         help="Number of loops."
-    )                           
+    )
+    parser.add_argument(
+        '-generate-plots',
+        '--generate-plots',
+        dest='generate_plots',
+        action='store_true',
+        default=False,
+        help="Generate Plots"
+    )                               
     parser.add_argument(
         "-v",
         "--verbose",
@@ -222,78 +230,49 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test 
 
 def base_kfold_cross_validation(X_train, y_train, m_train, k):
-    gkf = GroupKFold(n_splits=k)
+    start_cross = time.perf_counter()
 
-    X_base_train = []
-    y_base_train = []
-
-    fold_acc_training_scores = [] 
-    fold_f1_training_scores = [] 
-    fold_acc_val_scores = []    
-    fold_f1_val_scores = []    
-
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=m_train), start=1):
-        # Split into training and validation folds (group-aware)
-        X_training_fold, X_validation_fold = X_train[train_idx], X_train[val_idx]
-        y_training_fold, y_validation_fold = y_train[train_idx], y_train[val_idx]
-
-        # Create k-fold model
-        fold_model = RandomForestClassifier(
-            n_jobs=N_JOBS,        
-            n_estimators=N_ESTIMATORS,                     
-            max_depth=MAX_DEPTH,
-            max_features= MAX_FEATURES,                 
-            min_samples_split=MIN_SAMPLES_SPLIT,        
-            min_samples_leaf=MIN_SAMPLES_LEAF   
-        )
-
-        # Train k-fold model with k-fold datasets
-        fold_model.fit(X_training_fold, y_training_fold)
-
-        for idx, importance in enumerate(fold_model.feature_importances_):
-            print(f"Feature {idx}", importance)            
-
-        # Calculate training k-fold metrics
-        y_training_fold_pred = fold_model.predict(X_training_fold)
-        acc_score_training = accuracy_score(y_training_fold, y_training_fold_pred)
-        f1_score_training = f1_score(y_training_fold, y_training_fold_pred, average='macro') 
-
-        fold_acc_training_scores.append(acc_score_training)
-        fold_f1_training_scores.append(f1_score_training)
-
-        print(f"🟡 Fold {fold}/{k}: Training Accuracy Score: {acc_score_training:.4f}, Training F1-score: {f1_score_training:.4f}")
-
-        # Calculate validation k-fold metrics
-        y_validation_fold_pred = fold_model.predict(X_validation_fold)
-        acc_score_val = accuracy_score(y_validation_fold, y_validation_fold_pred)
-        f1_score_val = f1_score(y_validation_fold, y_validation_fold_pred, average='macro') 
-
-        fold_acc_val_scores.append(acc_score_val)
-        fold_f1_val_scores.append(f1_score_val)
-
-        print(f"🟡 Fold {fold}/{k}: Validation Accuracy Score: {acc_score_val:.4f}, Validation F1-score: {f1_score_val:.4f}")
-        
-    # create base model mean and standard deviation metrics
-    metric = {
-        "base_model_accuracy_train_mean": float(np.mean(fold_acc_training_scores)),
-        "base_model_f1_train_mean": float(np.mean(fold_f1_training_scores)),
-        "base_model_accuracy_validate_mean": float(np.mean(fold_acc_val_scores)),
-        "base_model_f1_validate_mean": float(np.mean(fold_f1_val_scores)),
-    }
-    
-    # Create base model
-    expert_model = RandomForestClassifier(
-        n_jobs=N_JOBS,        
+    # classifier model
+    model = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH, 
-        max_features= MAX_FEATURES,                
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
         min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF              
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
     )
 
-    expert_model.fit(X_train, y_train)
+    # Cross-validation strategy
+    gkf = GroupKFold(n_splits=k, shuffle=True)
+        
+    # Execute cross-validation       
+    cv_scores = cross_validate(
+        model,
+        X_train,
+        y_train,
+        cv=gkf,
+        groups=m_train,
+        scoring={
+            "accuracy": "accuracy",
+            "f1_macro": "f1_macro"
+        },
+        n_jobs=1
+    )
 
-    return expert_model, metric      
+    metrics = {
+        "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
+        "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
+    }
+
+    # Train classifier model
+    model.fit(X_train, y_train)
+
+    # cross validation time tracking
+    elapsed_cross = time.perf_counter() - start_cross
+    print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
+    
+    return model, metrics        
 
 def merge_base_metrics(metric_M, metric_PI):
     merged = {}
@@ -307,6 +286,8 @@ def merge_base_metrics(metric_M, metric_PI):
         merged[f"{key}_PI"] = value
 
     return merged
+
+start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
 
@@ -338,113 +319,88 @@ participant_ids = np.sort(np.unique(m_data))
 
 print("Total participants:", len(participant_ids))
 
-for n_participants in range(args.step_init, len(participant_ids) + 1, args.step):
-    # select first n participants
-    selected_participants = participant_ids[:n_participants]
+for loop in range(args.loops):
+    start_loop = time.perf_counter()
 
-    # rows belonging to selected participants
-    mask = np.isin(m_data, selected_participants)
+    print("🔵 Loop: " + str(loop))
 
-    for loop in range(args.loops):
-        print("🔵 Loop: " + str(loop))
+    print("🟢 Split dataset PI+M")
+    (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
 
-        print("🟢 get subset participant dataset")
-        X_sub_data = X_data[mask]
-        y_sub_data = y_data[mask]
-        m_sub_data = m_data[mask]
+    print("\n")
+    print(f"PI X Train size: {X_train_PI.shape}, PI y Train size: {y_train.shape}, PI X Test size: {X_test_PI.shape}, PI y Test size: {y_test.shape}")
+    print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
+    print("\n")
 
-        print("🟢 Split dataset PI+M")
-        (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test) = participant_group_split(X_sub_data, y_sub_data, m_sub_data)
+    print("🟢 k-Fold train base model PI")
+    base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
+    print("\n")
 
-        print("\n")
-        print(f"PI X Train size: {X_train_PI.shape}, PI y Train size: {y_train.shape}, PI X Test size: {X_test_PI.shape}, PI y Test size: {y_test.shape}")
-        print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
-        print("\n")
+    print("🟢 k-Fold train base model M")
+    base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
+    print("\n")
 
-        print("🟢 k-Fold train base model PI")
-        base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
-        print("\n")
+    print("🟢 Base predictions on training for PI and M")
+    pa_tr_PI = base_model_PI.predict_proba(X_train_PI)
+    pb_tr_M = base_model_M.predict_proba(X_train_M)
+    
+    stack_X_tr = np.hstack([pa_tr_PI, pb_tr_M])
 
-        print("🟢 k-Fold train base model M")
-        base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
-        print("\n")
+    print("🟢 Base predictions on test for PI and M")
+    pa_te_PI = base_model_PI.predict_proba(X_test_PI)
+    pb_te_M = base_model_M.predict_proba(X_test_M)
+    
+    stack_X_te = np.hstack([pa_te_PI, pb_te_M])
 
-        print("🟢 Base predictions on training set for PI and M")
-        pa_tr_PI = base_model_PI.predict_proba(X_train_PI)
-        pb_tr_M = base_model_M.predict_proba(X_train_M)
-        
-        stack_X_tr = np.hstack([pa_tr_PI, pb_tr_M])
+    print("🟢 Optimize meta model hyperparameters")
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("clf", LogisticRegression(max_iter=2000))
+    ])
 
-        pa_te_PI = base_model_PI.predict_proba(X_test_PI)
-        pb_te_M = base_model_M.predict_proba(X_test_M)
-        
-        stack_X_te = np.hstack([pa_te_PI, pb_te_M])
+    param_grid = {
+        "clf__C": [0.001, 0.01, 0.1, 1, 10],
+        "clf__penalty": ["l2"],
+        "clf__solver": ["lbfgs"]
+    }
 
-        print("🟢 Optimize meta model hyperparameters")
-        pipe = Pipeline([
-            ("scaler", StandardScaler()),
-            ("clf", LogisticRegression(max_iter=2000))
-        ])
+    cv = GroupKFold(n_splits=5)
 
-        param_grid = {
-            "clf__C": [0.001, 0.01, 0.1, 1, 10],
-            "clf__penalty": ["l2"],
-            "clf__solver": ["lbfgs"]
-        }
+    grid = GridSearchCV(
+        pipe,
+        param_grid=param_grid,
+        cv=cv,
+        scoring="accuracy",
+        n_jobs=-1
+    ) 
 
-        cv = GroupKFold(n_splits=5)
+    print("🟢 Train meta model with concatenated probability distribution from PI and M")
+    grid.fit(stack_X_tr, y_train, groups=m_train)
+    model_meta = grid.best_estimator_
 
-        grid = GridSearchCV(
-            pipe,
-            param_grid=param_grid,
-            cv=cv,
-            scoring="accuracy",
-            n_jobs=-1
-        ) 
+    print("Best params:", grid.best_params_)
+    print("Best CV accuracy:", grid.best_score_)
 
-        print("🟢 Train meta model with concatenated probability distribution from PI and M")
-        grid.fit(stack_X_tr, y_train, groups=m_train)
+    # merge base model metrics
+    metric = merge_base_metrics(metric_M, metric_PI)
 
-        print("Best params:", grid.best_params_)
-        print("Best CV accuracy:", grid.best_score_)
-        model_meta = grid.best_estimator_
+    # get meta model metrics
+    meta_model_test_accuracy = accuracy_score(y_test, model_meta.predict(stack_X_te))
+    meta_model_test_f1_score = f1_score(y_test, model_meta.predict(stack_X_te), average='macro')
 
-        # merge base model metrics
-        metric = merge_base_metrics(metric_M, metric_PI)
+    # save meta model metrics
+    metric["loop"] = loop
+    metric["base_model_test_accuracy_PI"] = metric_PI["model_accuracy_test"]
+    metric["base_model_test_f1_score_PI"] = metric_PI["model_f1_score_test"]
+    metric["base_model_test_accuracy_M"] = metric_M["model_accuracy_test"]
+    metric["base_model_test_f1_score_M"] = metric_M["model_f1_score_test"]
+    metric["meta_model_test_accuracy"] = meta_model_test_accuracy
+    metric["meta_model_test_f1_score"] = meta_model_test_f1_score
 
-        # get meta model metrics     
-        meta_train_acc = accuracy_score(y_train, model_meta.predict(stack_X_tr))
-        meta_train_f1 = f1_score(y_train, model_meta.predict(stack_X_tr), average='macro')
-        meta_test_acc = accuracy_score(y_test, model_meta.predict(stack_X_te))
-        meta_test_f1 = f1_score(y_test, model_meta.predict(stack_X_te), average='macro')
-
-        # save meta model metrics
-        metric["meta_model_accuracy_train"] = meta_train_acc
-        metric["meta_model_f1_train"] = meta_train_f1
-        metric["meta_model_accuracy_test"] = meta_test_acc
-        metric["meta_model_f1_test"] = meta_test_f1
-        metric["loop"] = loop
-        metric["participants"] = n_participants
-
-        # track meta model metrics
-        print("Train Accuracy Score: " + str(meta_train_acc))
-        print("Train F1-score: " + str(meta_train_f1))
-        print("Test accuracy score: " + str(meta_test_acc))
-        print("Test F1-score: " + str(meta_test_f1))
-        print("Loop: " + str(loop))
-        print("Participants: " + str(n_participants))
-
-        # create a metrics file
-        with open(str(Path.cwd()) + "/results/rf_cascading_cross_PI_M_accuracy_" + str(args.k_folds) + "_folds_" + str(n_participants) + "_participants_" + str(loop) + ".txt", "w") as f:            
-            f.write(f"Train Accuracy Score: {meta_train_acc}\n")
-            f.write(f"Train F1-score: {meta_train_f1}\n")
-            f.write(f"Test Accuracy Score: {meta_test_acc}\n")
-            f.write(f"Test F1-score: {meta_test_f1}\n")
-            f.write(f"participants: {n_participants}\n")            
-            f.write(f"loop: {loop}\n")            
-
-        print("\n")
-
+    # add metrics to collection
+    metrics.append(metric)
+    
+    if args.generate_plots == True:
         # create and plot confusion matrix from base model
         print("🟢 Confusion Matrix Meta model PI+M")
         cm = confusion_matrix(y_test, model_meta.predict(stack_X_te))
@@ -467,12 +423,15 @@ for n_participants in range(args.step_init, len(participant_ids) + 1, args.step)
         plt.tight_layout()
 
         plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(args.k_folds) + "_folds_" + str(n_participants) + "_participants_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
-
-        # add metrics to collection
-        metrics.append(metric)
+    
+    elapsed_loop = time.perf_counter() - start_app
+    print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 # Save metrics
 print("🟢 Save metrics for PI+M")
 df = pd.DataFrame(metrics)
 
-df.to_csv(str(Path.cwd()) + "/results/metrics_output.csv", index=False)
+df.to_csv(str(Path.cwd()) + "/results/stacking_rf_metrics.csv", index=False)
+
+elapsed_app = time.perf_counter() - start_app
+print(f"Application time: {elapsed_app:.2f} seconds")

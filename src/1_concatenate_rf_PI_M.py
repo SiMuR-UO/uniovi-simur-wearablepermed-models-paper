@@ -1,10 +1,11 @@
 import sys
+import time
 import argparse
 import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, cross_validate
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -94,7 +95,6 @@ MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve th
 MAX_FEATURES=0.2
 MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-N_JOBS=-1
 
 metrics = []
 
@@ -194,79 +194,50 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train, X_test, y_train, y_test, m_train, m_test
 
-def base_kfold_cross_validation(X_train, y_train, m_train, k):
-    gkf = GroupKFold(n_splits=k)
+def model_kfold_cross_validate(X_train, y_train, m_train, k):
+    start_cross = time.perf_counter()
 
-    X_base_train = []
-    y_base_train = []
-
-    fold_acc_training_scores = [] 
-    fold_f1_training_scores = [] 
-    fold_acc_val_scores = []    
-    fold_f1_val_scores = []    
-
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=m_train), start=1):
-        # Split into training and validation folds (group-aware)
-        X_training_fold, X_validation_fold = X_train[train_idx], X_train[val_idx]
-        y_training_fold, y_validation_fold = y_train[train_idx], y_train[val_idx]
-
-        # Create k-fold model
-        fold_model = RandomForestClassifier(
-            n_jobs=N_JOBS,        
-            n_estimators=N_ESTIMATORS,                     
-            max_depth=MAX_DEPTH,
-            max_features= MAX_FEATURES,                 
-            min_samples_split=MIN_SAMPLES_SPLIT,        
-            min_samples_leaf=MIN_SAMPLES_LEAF   
-        )
-
-        # Train k-fold model with k-fold datasets
-        fold_model.fit(X_training_fold, y_training_fold)
-
-        for idx, importance in enumerate(fold_model.feature_importances_):
-            print(f"Feature {idx}", importance)            
-
-        # Calculate training k-fold metrics
-        y_training_fold_pred = fold_model.predict(X_training_fold)
-        acc_score_training = accuracy_score(y_training_fold, y_training_fold_pred)
-        f1_score_training = f1_score(y_training_fold, y_training_fold_pred, average='macro') 
-
-        fold_acc_training_scores.append(acc_score_training)
-        fold_f1_training_scores.append(f1_score_training)
-
-        print(f"🟡 Fold {fold}/{k}: Training Accuracy Score: {acc_score_training:.4f}, Training F1-score: {f1_score_training:.4f}")
-
-        # Calculate validation k-fold metrics
-        y_validation_fold_pred = fold_model.predict(X_validation_fold)
-        acc_score_val = accuracy_score(y_validation_fold, y_validation_fold_pred)
-        f1_score_val = f1_score(y_validation_fold, y_validation_fold_pred, average='macro') 
-
-        fold_acc_val_scores.append(acc_score_val)
-        fold_f1_val_scores.append(f1_score_val)
-
-        print(f"🟡 Fold {fold}/{k}: Validation Accuracy Score: {acc_score_val:.4f}, Validation F1-score: {f1_score_val:.4f}")
-        
-    # create base model mean and standard deviation metrics
-    metric = {
-        "base_model_accuracy_train_mean": float(np.mean(fold_acc_training_scores)),
-        "base_model_f1_train_mean": float(np.mean(fold_f1_training_scores)),
-        "base_model_accuracy_validate_mean": float(np.mean(fold_acc_val_scores)),
-        "base_model_f1_validate_mean": float(np.mean(fold_f1_val_scores)),
-    }
-    
-    # Create base model
-    expert_model = RandomForestClassifier(
-        n_jobs=N_JOBS,        
+    # classifier model
+    model = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH, 
-        max_features= MAX_FEATURES,                
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
         min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF              
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
     )
 
-    expert_model.fit(X_train, y_train)
+    # Cross-validation strategy
+    gkf = GroupKFold(n_splits=k, shuffle=True)
+        
+    # Execute cross-validation       
+    cv_scores = cross_validate(
+        model,
+        X_train,
+        y_train,
+        cv=gkf,
+        groups=m_train,
+        scoring={
+            "accuracy": "accuracy",
+            "f1_macro": "f1_macro"
+        },
+        n_jobs=1
+    )
 
-    return expert_model, metric   
+    metrics = {
+        "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
+        "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
+    }
+
+    # Train classifier model
+    model.fit(X_train, y_train)
+
+    # cross validation time tracking
+    elapsed_cross = time.perf_counter() - start_cross
+    print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
+    
+    return model, metrics        
 
 args = parse_args(sys.argv[1:])
 
@@ -305,8 +276,11 @@ model_train_f1_scores = []
 model_test_accuracies = []
 model_test_f1_scores = []
 
+start_app = time.perf_counter()
+
 for loop in range(args.loops):
     print("🔵 Loop: " + str(loop))
+    start_loop = time.perf_counter()
 
     print("🟢 Split dataset PI+M")
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
@@ -316,7 +290,7 @@ for loop in range(args.loops):
     print("\n")    
    
     print("🟢 k-Fold cross validation model")
-    model, metrics_validation = base_kfold_cross_validation(X_train, y_train, m_train, args.k_folds)
+    model, metrics = model_kfold_cross_validate(X_train, y_train, m_train, args.k_folds)
 
     print("🟢 Validate model")
     model_test_accuracy = accuracy_score(y_test, model.predict(X_test))
@@ -324,16 +298,15 @@ for loop in range(args.loops):
 
     print("🟢 Append model metrics")
     loops.append(loop)
-    model_train_accuracies.append(metrics_validation['base_model_accuracy_validate_mean'])
-    model_train_f1_scores.append(metrics_validation['base_model_f1_validate_mean'])
-    model_test_accuracies.append(model_test_accuracy)
-    model_test_f1_scores.append(model_test_f1_score)
+    model_test_accuracies.append(metrics["model_accuracy_test"])
+    model_test_f1_scores.append(metrics["model_f1_score_test"])
+
+    elapsed_loop = time.perf_counter() - start_loop
+    print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 print("🟢 Save metrics")
 df_metrics = pd.DataFrame({   
     'loop': loops,
-    'model_train_accuracy': model_train_accuracies,
-    'model_train_f1_score': model_train_f1_scores,
     'model_test_accuracy': model_test_accuracies,
     'model_test_f1_score': model_test_f1_scores,
 })
@@ -352,4 +325,7 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
-df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)     
+df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)
+
+elapsed_app = time.perf_counter() - start_app
+print(f"Application time: {elapsed_app:.2f} seconds")

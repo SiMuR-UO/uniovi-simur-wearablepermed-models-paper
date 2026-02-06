@@ -650,7 +650,7 @@ for loop in range(args.loops):
 
     y_gate_val = (err_PI_val < err_M_val).astype(int)
 
-    gate_acc = accuracy_score(y_gate_val, gate.predict(X_gate_val)
+    gate_acc = accuracy_score(y_gate_val, gate.predict(X_gate_val))
 
     gate_model_test_accuracies.append(gate_acc) #TODO
 
@@ -721,16 +721,6 @@ for loop in range(args.loops):
 
         plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="VAE Latent Space (PI)", file_name="tsne_VAE_latent_PI.png")
         plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="VAE Latent Space (M)", file_name="tsne_VAE_latent_M.png")
-
-expert_model_test_accuracies_PI = []
-expert_model_test_f1_scores_PI = []
-expert_model_test_accuracies_M = []
-expert_model_test_f1_scores_M = []
-gate_model_test_accuracies = []
-moe_model_test_soft_accuracies = []
-moe_model_test_soft_f1_scores = []
-moe_model_test_hard_accuracies = []
-moe_model_test_hard_f1_scores = []
 
 print("🟢 Save metrics")
 df_metrics = pd.DataFrame({   

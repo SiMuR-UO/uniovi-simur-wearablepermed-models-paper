@@ -527,6 +527,7 @@ for loop in range(args.loops):
 
 
 print("🟢 Save metrics")
+# Create dataframe with metric collections
 df_metrics = pd.DataFrame({   
     'loop': loops,
     'base_model_train_accuracy_PI': base_model_train_accuracies_PI,
@@ -544,5 +545,19 @@ df_metrics = pd.DataFrame({
     'moe_acc_hard': moe_acc_hards,
     'moe_f1_weight_hard': moe_f1_weight_hards
 })
+
+# Compute mean and std (numeric columns only)
+mean_row = df_metrics.mean(numeric_only=True)
+std_row = df_metrics.std(numeric_only=True)
+
+# Add a label for the index column
+mean_row["loop"] = "mean"
+std_row["loop"] = "std"
+
+# Append to dataframe
+df_metrics = pd.concat(
+    [df_metrics, pd.DataFrame([mean_row, std_row])],
+    ignore_index=True
+)
 
 df_metrics.to_csv(str(Path.cwd()) + "/results/moe_rf_metrics.csv", index=False)    

@@ -669,4 +669,18 @@ df_metrics = pd.DataFrame({
     'moe_model_test_hard_f1_score': moe_model_test_hard_f1_scores,
 })
 
+# Compute mean and std (numeric columns only)
+mean_row = df_metrics.mean(numeric_only=True)
+std_row = df_metrics.std(numeric_only=True)
+
+# Add a label for the index column
+mean_row["loop"] = "mean"
+std_row["loop"] = "std"
+
+# Append to dataframe
+df_metrics = pd.concat(
+    [df_metrics, pd.DataFrame([mean_row, std_row])],
+    ignore_index=True
+)
+
 df_metrics.to_csv(str(Path.cwd()) + "/results/moe_ae_metrics.csv", index=False)     

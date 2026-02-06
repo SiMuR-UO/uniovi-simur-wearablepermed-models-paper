@@ -186,12 +186,12 @@ def parse_args(args):
         help=f"Optimize hyperparameters num trials."        
     )
     parser.add_argument(
-        '-plot-tsne',
-        '--plot-tsne',
-        dest='plot_tsne',
+        '-generate-plots',
+        '--generate-plots',
+        dest='generate_plots',
         action='store_true',
         default=False,
-        help="Plot laten t-SNE"
+        help="Generate Plots"
     )                
     parser.add_argument(
         "-v",
@@ -292,12 +292,29 @@ def build_decoder(output_dim, latent_dim, hidden_dim, name):
 
     return Model(inputs, outputs, name=name)
 
-def build_classifier(num_classes, latent_dim, hidden_dim, name):
-    inputs = Input(shape=(latent_dim,))
-    x = layers.Dense(hidden_dim, activation="relu")(inputs)
-    outputs = layers.Dense(num_classes, activation="softmax")(x)
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+    p_PI_val = expert_PI.predict_proba(X_PI)
+    p_M_val = expert_M.predict_proba(X_M)
 
-    return Model(inputs, outputs, name=name)
+    # Per-sample correctness
+    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
+    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
+
+    conf_PI = p_PI_val.max(axis=1)
+    conf_M = p_M_val.max(axis=1)
+
+    gate_y = np.zeros_like(y)
+
+    mask_PI = (correct_PI == 1) & (correct_M == 0)
+    gate_y[mask_PI] = 1
+
+    mask_M = (correct_M == 1) & (correct_PI == 0)
+    gate_y[mask_M] = 0
+
+    mask_tie = (correct_PI == correct_M)
+    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
+
+    return gate_y
 
 def objective(trial, X_train, X_val, input_dim):
     latent_dim = trial.suggest_int("latent_dim", 8, 32)
@@ -334,44 +351,60 @@ def objective(trial, X_train, X_val, input_dim):
     return float(val_loss)    
 
 def extract_latent_stats(encoder, X, batch_size=256):
-    z_mean, z_log_var, _ = encoder.predict(X, batch_size=batch_size)
+    z_mean, z_log_var, z = encoder.predict(X, batch_size=batch_size)
     
-    return z_mean, z_log_var
+    return z_mean, z_log_var, z
 
-def reconstruction_error(vae, X, batch_size=256):
-    X_hat = vae.predict(X, batch_size=batch_size)
+def reconstruction_error(model, X, batch_size=256):
+    X_hat = model.predict(X, batch_size=batch_size)
 
     return np.mean((X - X_hat) ** 2, axis=1)
 
-def gate_decision(encoder_PI, encoder_M, gate, X_PI, X_M):
-    z_mu_PI, z_lv_PI, _ = encoder_PI.predict(X_PI)
-    z_mu_M,  z_lv_M,  _ = encoder_M.predict(X_M)
-
-    X_gate = np.concatenate(
-        [z_mu_PI, z_lv_PI, z_mu_M, z_lv_M],
-        axis=1
-    )
-
-    return gate.predict(X_gate)
-
-def plot_reconstruction_error(vae, X, file_name, title="Reconstruction Error"):
-    X_hat = vae.predict(X)
+def plot_reconstruction_error(model, X, file_name, title="Reconstruction Error"):
+    X_hat = model.predict(X)
     mse = np.mean((X - X_hat) ** 2, axis=1)
 
-    plt.figure(figsize=(8, 4))    
-    plt.hist(mse, bins=50, alpha=0.7)
+    plt.figure(figsize=(8, 4))
+    plt.hist(mse, bins=50, alpha=0.7, label="Reconstruction Error")
     plt.xlabel("Reconstruction MSE")
     plt.ylabel("Count")
     plt.title(title)
+    plt.legend()
     plt.grid(True)
 
-    plt.savefig("images/" + file_name, dpi=300, bbox_inches="tight")
+    plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
 
-def plot_vae_reconstruction(vae, X, file_name, n_samples=5, title="VAE Reconstruction"):
+def plot_reconstruction(model, X, file_name, n_samples=5, title="Autoencoder Reconstruction"):
+    idx = np.random.choice(len(X), n_samples, replace=False)
+    X_sel = X[idx]
+    X_hat = model.predict(X_sel)
+
+    plt.figure(figsize=(12, 3 * n_samples))
+
+    for i in range(n_samples):
+        # Original
+        plt.subplot(n_samples, 2, 2*i + 1)
+        plt.plot(X_sel[i], label="Original", linewidth=2)
+        plt.title("Original")
+        plt.legend()
+        plt.grid(True)
+
+        # Reconstruction
+        plt.subplot(n_samples, 2, 2*i + 2)
+        plt.plot(X_hat[i], label="Reconstruction", linestyle="--")
+        plt.title("Reconstruction")
+        plt.legend()
+        plt.grid(True)
+
+    plt.suptitle(title, fontsize=14)
+    plt.tight_layout()
+    plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
+
+def plot_vae_reconstruction(model, X, file_name, n_samples=5, title="VAE Reconstruction"):
     idx = np.random.choice(len(X), n_samples, replace=False)
     X_sel = X[idx]
 
-    X_hat = vae.predict(X_sel)
+    X_hat = model.predict(X_sel)
 
     plt.figure(figsize=(12, 3 * n_samples))
 
@@ -392,9 +425,9 @@ def plot_vae_reconstruction(vae, X, file_name, n_samples=5, title="VAE Reconstru
     plt.tight_layout()
     plt.savefig("images/"+ file_name, dpi=300, bbox_inches="tight")
 
-def compare_reconstruction_errors(vae_PI, vae_M, X_PI, X_M, file_name):
-    err_PI = np.mean((X_PI - vae_PI.predict(X_PI))**2, axis=1)
-    err_M  = np.mean((X_M  - vae_M.predict(X_M))**2, axis=1)
+def compare_reconstruction_errors(model_PI, model_M, X_PI, X_M, file_name):
+    err_PI = np.mean((X_PI - model_PI.predict(X_PI))**2, axis=1)
+    err_M  = np.mean((X_M  - model_M.predict(X_M))**2, axis=1)
 
     plt.figure(figsize=(8, 4))
     plt.hist(err_PI, bins=50, alpha=0.7, label="PI")
@@ -456,53 +489,40 @@ def plot_tsne_autoencoder(Z_tsne, y_train, class_names, title, file_name):
 
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")   
 
-def mixture_of_experts_soft_predict_proba(p_PI, p_M, gate_proba):
-    w_PI = gate_proba[:, 1][:, None]
-    w_M = gate_proba[:, 0][:, None]
+def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N,8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
 
-    p_moe = w_PI * p_PI + w_M * p_M
-    y_pred = p_moe.argmax(axis=1)
+    # Gate probabilities prediction (N,2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
 
-    return y_pred, p_moe
+    # Extract expert weights (N, 1)
+    w_PI = w[:, 1].reshape(-1, 1)
+    w_M = w[:, 0].reshape(-1, 1)
 
-def mixture_of_experts_hard_predict_proba(p_PI, p_M, gate_proba):
-    choose_PI = gate_proba[:, 1] >= gate_proba[:, 0]
+    # Weighted mixture
+    return w_PI * p_test_PI + w_M * p_test_M
 
-    p_moe = np.zeros_like(p_PI)
-    p_moe[choose_PI] = p_PI[choose_PI]
-    p_moe[~choose_PI] = p_M[~choose_PI]
+def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N, 8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
 
-    y_pred = p_moe.argmax(axis=1)
+    # Gate probabilities prediction (N, 2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
 
-    return y_pred, p_moe
+    # Choose expert per sample (top-1)
+    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
 
-def moe_predict(X_test_PI, X_test_M, encoder_PI, classifier_PI, encoder_M, classifier_M, gate):
-    # Encode test data
-    z_mean_PI, z_logvar_PI, z_sample_PI = encoder_PI(X_test_PI, training=False)  # shape (N, latent_dim)
-    z_mean_M, z_logvar_M, z_sample_M  = encoder_M(X_test_M, training=False)
+    # Allocate output
+    p_final = np.zeros_like(p_test_PI)
 
-    # Expert class probabilities (convert logits if needed)
-    p_PI = classifier_PI(z_sample_PI, training=False).numpy()
-    p_M = classifier_M(z_sample_M, training=False).numpy()
+    # Fill per-sample
+    p_final[choose_PI] = p_test_PI[choose_PI]
+    p_final[~choose_PI] = p_test_M[~choose_PI]
 
-    # Gate input = concatenation of latent vectors
-    #X_gate_test = np.concatenate([z_sample_PI.numpy(), z_sample_M.numpy()], axis=1)
-    X_gate_test = np.concatenate([
-        z_mean_PI.numpy(), z_logvar_PI.numpy(),
-        z_mean_M.numpy(),  z_logvar_M.numpy(),
-    ], axis=1)
-
-    # Gate probabilities
-    #gate_proba = gate.predict(X_gate_test)  # shape (N, 2)
-    gate_proba = gate.predict_proba(X_gate_test)
-
-    # Soft MoE
-    y_soft, p_soft = mixture_of_experts_soft_predict_proba(p_PI, p_M, gate_proba)
-
-    # Hard MoE
-    y_hard, p_hard = mixture_of_experts_hard_predict_proba(p_PI, p_M, gate_proba)
-
-    return y_soft, y_hard, p_soft, p_hard
+    return p_final
 
 args = parse_args(sys.argv[1:])
 
@@ -608,18 +628,41 @@ for loop in range(args.loops):
 
     encoder_M.trainable = False
 
-    print("🟢 Concatenate datasets")
-    z_mu_PI, z_lv_PI  = extract_latent_stats(encoder_PI, X_train_PI)
-    z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
+    print("🟢 Build classifier PI")
+    _, _, Z_validation_PI  = extract_latent_stats(encoder_PI, X_validation_PI)
 
-    X_gate = np.concatenate([z_mu_PI, z_lv_PI, z_mu_M, z_lv_M], axis=1)
+    clf_PI = LogisticRegression(max_iter=1000)
+    clf_PI.fit(Z_validation_PI, y_validation)
 
-    print("🟢 Generate gate labels") 
-    err_PI = reconstruction_error(vae_PI, X_train_PI)
-    err_M  = reconstruction_error(vae_M,  X_train_M)
+    print("🟢 Validate classifier PI")
+    _, _, Z_test_PI  = extract_latent_stats(encoder_PI, X_test_PI)
 
-    # Gate label: 1 → PI expert, 0 → M expert
-    y_gate = (err_PI < err_M).astype(int)
+    y_test_pred_PI = clf_PI.predict(Z_test_PI)
+    acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
+    f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
+
+    expert_model_test_accuracies_PI.append(acc_score_test_PI)
+    expert_model_test_f1_scores_PI.append(f1_score_test_PI)
+
+    print("🟢 Build classifier M")
+    _, _, Z_validation_M  = extract_latent_stats(encoder_M, X_validation_M)
+
+    clf_M = LogisticRegression(max_iter=1000)
+    clf_M.fit(Z_validation_M, y_validation)
+
+    print("🟢 Validate classifier M")
+    _, _, Z_test_M  = extract_latent_stats(encoder_M, X_test_M)
+
+    y_test_pred_M = clf_M.predict(Z_test_M)
+    acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
+    f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
+
+    expert_model_test_accuracies_M.append(acc_score_test_M)
+    expert_model_test_f1_scores_M.append(f1_score_test_M)
+
+    print("🟢 Build gate validation datasets")
+    X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
+    y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
 
     print("🟢 Train Logistic Regression gate") 
     gate = Pipeline([
@@ -632,86 +675,58 @@ for loop in range(args.loops):
         ))
     ])
 
-    print("🟢 Gate training")
-    gate.fit(X_gate, y_gate)
+    gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Gate evaluation")
-    y_gate_pred = gate.predict(X_gate)
-    print("Gate accuracy:", accuracy_score(y_gate, y_gate_pred))
+    print("🟢 Validate gate")
+    _, _, Z_test_PI = encoder_PI.predict(X_test_PI)
+    _, _, Z_test_M = encoder_M.predict(X_test_M)
 
-    print("🟢 Gate validation accuracy")
-    z_mu_PI_val, z_lv_PI_val = extract_latent_stats(encoder_PI, X_validation_PI)
-    z_mu_M_val,  z_lv_M_val  = extract_latent_stats(encoder_M,  X_validation_M)
+    X_gate_test = np.hstack([Z_test_PI, Z_test_M])
+    y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
 
-    X_gate_val = np.concatenate([z_mu_PI_val, z_lv_PI_val, z_mu_M_val, z_lv_M_val], axis=1)
+    gate_pred = gate.predict(X_gate_test)
 
-    err_PI_val = reconstruction_error(vae_PI, X_validation_PI)
-    err_M_val  = reconstruction_error(vae_M,  X_validation_M)
+    gate_acc = (gate_pred == y_gate_test).mean()
 
-    y_gate_val = (err_PI_val < err_M_val).astype(int)
+    gate_model_test_accuracies.append(gate_acc)
+    print("Gate accuracy:", gate_acc)
 
-    gate_acc = accuracy_score(y_gate_val, gate.predict(X_gate_val))
+    print("🟢 Soft Validate MoE")
+    p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
-    gate_model_test_accuracies.append(gate_acc) #TODO
-
-    print("Gate validation accuracy:", gate_acc)
-
-    print("🟢 Build classifier PI")
-    z_mean_PI, z_logvar_PI, z_sample_PI = encoder_PI(X_train_PI, training=False)
-
-    classifier_PI = build_classifier(len(ACTIVITIES), best_params_PI["latent_dim"], best_params_PI["hidden_dim"], name="classifier_PI")
-    classifier_PI.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    classifier_PI.fit(z_sample_PI, y_train, epochs=20, batch_size=64)
-
-    print("🟢 Validate classifier PI")
-    y_test_pred_PI = classifier_PI.predict(X_test_PI)
-    acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
-    f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
-
-    expert_model_test_accuracies_PI.append(acc_score_test_PI)
-    expert_model_test_f1_scores_PI.append(f1_score_test_PI)
-
-    print("🟢 Build classifier M")
-    z_mean_M, z_logvar_M, z_sample_M = encoder_M(X_train_M, training=False)
-
-    classifier_M = build_classifier(len(ACTIVITIES), best_params_M["latent_dim"], best_params_M["hidden_dim"], name="classifier_M")
-    classifier_M.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-    classifier_M.fit(z_sample_M, y_train, epochs=20, batch_size=64)
-
-    print("🟢 Validate classifier M")
-    y_test_pred_M = classifier_M.predict(X_test_M)
-    acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
-    f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
-
-    expert_model_test_accuracies_M.append(acc_score_test_M)
-    expert_model_test_f1_scores_M.append(f1_score_test_M)
-
-    print("🟢 MoE validation")
-    y_pred_soft, y_pred_hard, p_soft, p_hard = moe_predict(X_test_PI, X_test_M, encoder_PI, classifier_PI, encoder_M, classifier_M, gate)
+    y_pred_soft = p_final_soft.argmax(axis=1)
 
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
-    print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
-
-    moe_acc_hard = accuracy_score(y_test, y_pred_hard)
-    moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
-    print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
     moe_model_test_soft_accuracies.append(moe_acc_soft)
     moe_model_test_soft_f1_scores.append(moe_f1_weight_soft)
+
+    print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
+
+    print("🟢 Hard Validate MoE")
+    p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
+
+    y_pred_hard = p_final_hard.argmax(axis=1)
+
+    moe_acc_hard = accuracy_score(y_test, y_pred_hard)
+    moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
+
     moe_model_test_hard_accuracies.append(moe_acc_soft)
     moe_model_test_hard_f1_scores.append(moe_f1_weight_soft)
 
-    print("🟢 Reconstruction plots")
-    plot_reconstruction_error(vae_PI, X_test_PI, "mse_VAE_PI.png", "Reconstruction Error PI")
-    plot_reconstruction_error(vae_M, X_test_M, "mse_VAE_M.png", "Reconstruction Error M")
+    print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
-    plot_vae_reconstruction(vae_PI, X_test_PI, "reconstruction_VAE_PI.png", n_samples=5, title="Samples VAE Reconstruction PI")
-    plot_vae_reconstruction(vae_M, X_test_M, "reconstruction_VAE_M.png", n_samples=5, title="Samples VAE Reconstruction M")
+    if args.generate_plots == True:
+        print("🟢 Reconstruction plots")
+        plot_reconstruction_error(vae_PI, X_test_PI, "mse_VAE_PI.png", "Reconstruction Error PI")
+        plot_reconstruction_error(vae_M, X_test_M, "mse_VAE_M.png", "Reconstruction Error M")
 
-    compare_reconstruction_errors(vae_PI, vae_M, X_test_PI, X_test_M, "compare_reconstruction_VAE_PI_M.png")
+        plot_reconstruction(vae_PI, X_test_PI, "reconstruction_VAE_PI.png", n_samples=5, title="Samples VAE Reconstruction PI")
+        plot_reconstruction(vae_M, X_test_M, "reconstruction_VAE_M.png", n_samples=5, title="Samples VAE Reconstruction M")
 
-    if args.plot_tsne == True:
+        compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")  
+
         print("🟢 Latent Space t-SNE plots")
         z_mu_PI, z_lv_PI = extract_latent_stats(encoder_PI, X_train_PI)
         z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
@@ -735,5 +750,19 @@ df_metrics = pd.DataFrame({
     'moe_model_test_hard_accuracy': moe_model_test_hard_accuracies,
     'moe_model_test_hard_f1_score': moe_model_test_hard_f1_scores,
 })
+
+# Compute mean and std (numeric columns only)
+mean_row = df_metrics.mean(numeric_only=True)
+std_row = df_metrics.std(numeric_only=True)
+
+# Add a label for the index column
+mean_row["loop"] = "mean"
+std_row["loop"] = "std"
+
+# Append to dataframe
+df_metrics = pd.concat(
+    [df_metrics, pd.DataFrame([mean_row, std_row])],
+    ignore_index=True
+)
 
 df_metrics.to_csv(str(Path.cwd()) + "/results/moe_vae_metrics.csv", index=False)         

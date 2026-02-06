@@ -654,16 +654,6 @@ for loop in range(args.loops):
 
     compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
 
-expert_model_test_accuracies_PI = []
-expert_model_test_f1_scores_PI = []
-expert_model_test_accuracies_M = []
-expert_model_test_f1_scores_M = []
-gate_model_test_accuracies = []
-moe_model_test_soft_accuracies = []
-moe_model_test_soft_f1_scores = []
-moe_model_test_hard_accuracies = []
-moe_model_test_hard_f1_scores = []
-
 print("🟢 Save metrics")
 df_metrics = pd.DataFrame({   
     'loop': loops,

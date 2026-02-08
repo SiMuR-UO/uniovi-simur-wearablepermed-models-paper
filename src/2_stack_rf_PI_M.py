@@ -390,12 +390,12 @@ for loop in range(args.loops):
 
     # save meta model metrics
     metric["loop"] = loop
-    metric["base_model_test_accuracy_PI"] = metric_PI["model_accuracy_test"]
-    metric["base_model_test_f1_score_PI"] = metric_PI["model_f1_score_test"]
-    metric["base_model_test_accuracy_M"] = metric_M["model_accuracy_test"]
-    metric["base_model_test_f1_score_M"] = metric_M["model_f1_score_test"]
-    metric["meta_model_test_accuracy"] = meta_model_test_accuracy
-    metric["meta_model_test_f1_score"] = meta_model_test_f1_score
+    metric["base_model_accuracy_PI"] = metric_PI["model_accuracy_test"]
+    metric["base_model_f1_score_PI"] = metric_PI["model_f1_score_test"]
+    metric["base_model_accuracy_M"] = metric_M["model_accuracy_test"]
+    metric["base_model_f1_score_M"] = metric_M["model_f1_score_test"]
+    metric["meta_model_accuracy"] = meta_model_test_accuracy
+    metric["meta_model_f1_score"] = meta_model_test_f1_score
 
     # add metrics to collection
     metrics.append(metric)

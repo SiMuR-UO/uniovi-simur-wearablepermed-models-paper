@@ -19,16 +19,15 @@
             //"--loops", "30",
 
             // Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
-            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
-            "--superclases", "Captured24",            
-            "--k-folds", "3",
-            "--loops", "2",
-            
-            // Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
             //"--superclases", "Captured24",            
             //"--k-folds", "3",
-            //"--loops", "2",
+            //"--loops", "30",
+            
+            // Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
+            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+            "--superclases", "CPA-MET",
+            "--loops", "30",
 
             // MoE with two Random Forest experts and one Logistic Regression Gate: 3_mixture_of_experts_rf_PI_M.py 
             //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",

@@ -308,8 +308,8 @@ for loop in range(args.loops):
 print("🟢 Save metrics")
 df_metrics = pd.DataFrame({   
     'loop': loops,
-    'model_test_accuracy': model_test_accuracies,
-    'model_test_f1_score': model_test_f1_scores,
+    'model_accuracy': model_test_accuracies,
+    'model_f1_score': model_test_f1_scores,
 })
 
 # Compute mean and std (numeric columns only)

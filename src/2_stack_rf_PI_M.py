@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, GroupKFold, cross_validate
+from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, GroupKFold, cross_validate
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -198,27 +198,16 @@ def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, test_size=0.2):
-    # split concatate dataset between train and test
-    unique_groups = np.unique(m_data)
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    n_test = int(len(unique_groups) * test_size)
-    test_groups = unique_groups[-n_test:]
-    train_groups = unique_groups[:-n_test]
+    train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
 
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]    
+    X_train, X_test = X_data[train_idx], X_data[test_idx]
+    y_train, y_test = y_data[train_idx], y_data[test_idx]
+    m_train, m_test = m_data[train_idx], m_data[test_idx]
 
-    X_train = X_data[train_idx]
-    X_test = X_data[test_idx]
-    
-    y_train = y_data[train_idx]
-    y_test = y_data[test_idx]
-
-    m_train = m_data[train_idx]
-    m_test = m_data[test_idx]
-
-    print(f"Participants for train: {len(np.unique(m_data[train_idx]))}")
-    print(f"Participants for test:  {len(np.unique(m_data[test_idx]))}")
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
     # split concatate dataset between PI and M
     X_train_M = X_train[:, :91]
@@ -227,7 +216,7 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     X_test_M = X_test[:, :91]
     X_test_PI = X_test[:, 91:]
     
-    return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test 
+    return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
 def base_kfold_cross_validation(X_train, y_train, m_train, k):
     start_cross = time.perf_counter()
@@ -274,19 +263,6 @@ def base_kfold_cross_validation(X_train, y_train, m_train, k):
     
     return model, metrics        
 
-def merge_base_metrics(metric_M, metric_PI):
-    merged = {}
-
-    # Rename and add M metrics
-    for key, value in metric_M.items():
-        merged[f"{key}_M"] = value
-
-    # Rename and add PI metrics
-    for key, value in metric_PI.items():
-        merged[f"{key}_PI"] = value
-
-    return merged
-
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -322,6 +298,8 @@ print("Total participants:", len(participant_ids))
 for loop in range(args.loops):
     start_loop = time.perf_counter()
 
+    metric = {}
+
     print("🔵 Loop: " + str(loop))
 
     print("🟢 Split dataset PI+M")
@@ -345,12 +323,6 @@ for loop in range(args.loops):
     pb_tr_M = base_model_M.predict_proba(X_train_M)
     
     stack_X_tr = np.hstack([pa_tr_PI, pb_tr_M])
-
-    print("🟢 Base predictions on test for PI and M")
-    pa_te_PI = base_model_PI.predict_proba(X_test_PI)
-    pb_te_M = base_model_M.predict_proba(X_test_M)
-    
-    stack_X_te = np.hstack([pa_te_PI, pb_te_M])
 
     print("🟢 Optimize meta model hyperparameters")
     pipe = Pipeline([
@@ -381,21 +353,24 @@ for loop in range(args.loops):
     print("Best params:", grid.best_params_)
     print("Best CV accuracy:", grid.best_score_)
 
-    # merge base model metrics
-    metric = merge_base_metrics(metric_M, metric_PI)
+    print("🟢 Validate meta model")
+    pa_te_PI = base_model_PI.predict_proba(X_test_PI)
+    pb_te_M = base_model_M.predict_proba(X_test_M)
+    
+    stack_X_te = np.hstack([pa_te_PI, pb_te_M])
 
-    # get meta model metrics
     meta_model_test_accuracy = accuracy_score(y_test, model_meta.predict(stack_X_te))
     meta_model_test_f1_score = f1_score(y_test, model_meta.predict(stack_X_te), average='macro')
 
     # save meta model metrics
     metric["loop"] = loop
-    metric["base_model_test_accuracy_PI"] = metric_PI["model_accuracy_test"]
-    metric["base_model_test_f1_score_PI"] = metric_PI["model_f1_score_test"]
-    metric["base_model_test_accuracy_M"] = metric_M["model_accuracy_test"]
-    metric["base_model_test_f1_score_M"] = metric_M["model_f1_score_test"]
-    metric["meta_model_test_accuracy"] = meta_model_test_accuracy
-    metric["meta_model_test_f1_score"] = meta_model_test_f1_score
+
+    metric["base_model_accuracy_PI"] = metric_PI["model_accuracy_test"]
+    metric["base_model_f1_score_PI"] = metric_PI["model_f1_score_test"]
+    metric["base_model_accuracy_M"] = metric_M["model_accuracy_test"]
+    metric["base_model_f1_score_M"] = metric_M["model_f1_score_test"]
+    metric["meta_model_accuracy"] = meta_model_test_accuracy
+    metric["meta_model_f1_score"] = meta_model_test_f1_score
 
     # add metrics to collection
     metrics.append(metric)
@@ -429,9 +404,23 @@ for loop in range(args.loops):
 
 # Save metrics
 print("🟢 Save metrics for PI+M")
-df = pd.DataFrame(metrics)
+df_metrics = pd.DataFrame(metrics)
 
-df.to_csv(str(Path.cwd()) + "/results/stacking_rf_metrics.csv", index=False)
+# Compute mean and std (numeric columns only)
+mean_row = df_metrics.mean(numeric_only=True)
+std_row = df_metrics.std(numeric_only=True)
+
+# Add a label for the index column
+mean_row["loop"] = "mean"
+std_row["loop"] = "std"
+
+# Append to dataframe
+df_metrics = pd.concat(
+    [df_metrics, pd.DataFrame([mean_row, std_row])],
+    ignore_index=True
+)
+
+df_metrics.to_csv(str(Path.cwd()) + "/results/stacking_rf_metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

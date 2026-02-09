@@ -125,14 +125,6 @@ def parse_args(args):
         "--superclases",
         dest="superclases",    
         help=f"Use Superclases: Captured24, CPA-METS"
-    )     
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",   
-        dest="k_folds",        
-        type=int,
-        default=3,
-        help=f"training k-folds."        
     )
     parser.add_argument(
         "-step-init",
@@ -218,51 +210,6 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
-# def base_kfold_cross_validation(X_train, y_train, m_train, k):
-#     start_cross = time.perf_counter()
-
-#     # classifier model
-#     model = RandomForestClassifier(        
-#         n_estimators=N_ESTIMATORS,                     
-#         max_depth=MAX_DEPTH,
-#         max_features= MAX_FEATURES,                 
-#         min_samples_split=MIN_SAMPLES_SPLIT,        
-#         min_samples_leaf=MIN_SAMPLES_LEAF,
-#         n_jobs=-1,
-#         verbose=1   
-#     )
-
-#     # Cross-validation strategy
-#     gkf = GroupKFold(n_splits=k, shuffle=True)
-        
-#     # Execute cross-validation       
-#     cv_scores = cross_validate(
-#         model,
-#         X_train,
-#         y_train,
-#         cv=gkf,
-#         groups=m_train,
-#         scoring={
-#             "accuracy": "accuracy",
-#             "f1_macro": "f1_macro"
-#         },
-#         n_jobs=1
-#     )
-
-#     metrics = {
-#         "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
-#         "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
-#     }
-
-#     # Train classifier model
-#     model.fit(X_train, y_train)
-
-#     # cross validation time tracking
-#     elapsed_cross = time.perf_counter() - start_cross
-#     print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
-    
-#     return model, metrics        
-
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -310,10 +257,6 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    #print("🟢 k-Fold train base model PI")
-    #base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
-    #print("\n")
-
     print("🟢 training model PI")
     base_model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
@@ -329,11 +272,7 @@ for loop in range(args.loops):
 
     print("🟢 Validate model PI")
     model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
-    model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')    
-
-    #print("🟢 k-Fold train base model M")
-    #base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
-    #print("\n")
+    model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
 
     base_model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
@@ -430,7 +369,7 @@ for loop in range(args.loops):
         plt.yticks(rotation=0)
         plt.tight_layout()
 
-        plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(args.k_folds) + "_folds_" + str(n_participants) + "_participants_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
+        plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(n_participants) + "_participants_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
     
     elapsed_loop = time.perf_counter() - start_app
     print(f"Loop time: {elapsed_loop:.2f} seconds")

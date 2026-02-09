@@ -407,7 +407,7 @@ for loop in range(args.loops):
     # add metrics to collection
     metrics.append(metric)
 
-    elapsed_loop = time.perf_counter() - start_app
+    elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 print("🟢 Calculate metrics mean and standard deviations")

@@ -355,7 +355,7 @@ for loop in range(args.loops):
 
         plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
     
-    elapsed_loop = time.perf_counter() - start_app
+    elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 # Save metrics

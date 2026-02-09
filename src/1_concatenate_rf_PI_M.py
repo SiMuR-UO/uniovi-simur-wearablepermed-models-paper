@@ -5,8 +5,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_validate
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 
@@ -120,16 +119,7 @@ def parse_args(args):
         "--superclases",
         dest="superclases",    
         help=f"Use Superclases: Captured24, CPA-METS"
-    )         
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",
-        type=int,
-        default=5,
-        dest="k_folds",       
-        required=True,
-        help=f"k-Folds for train."
-    )        
+    )       
     parser.add_argument(
         "-loops",
         "--loops",
@@ -182,51 +172,6 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
 
     return X_train, X_test, y_train, y_test, m_train, m_test
 
-def model_kfold_cross_validate(X_train, y_train, m_train, k):
-    start_cross = time.perf_counter()
-
-    # classifier model
-    model = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    )
-
-    # Cross-validation strategy
-    gkf = GroupKFold(n_splits=k, shuffle=True)
-        
-    # Execute cross-validation       
-    cv_scores = cross_validate(
-        model,
-        X_train,
-        y_train,
-        cv=gkf,
-        groups=m_train,
-        scoring={
-            "accuracy": "accuracy",
-            "f1_macro": "f1_macro"
-        },
-        n_jobs=1
-    )
-
-    metrics = {
-        "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
-        "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
-    }
-
-    # Train classifier model
-    model.fit(X_train, y_train)
-
-    # cross validation time tracking
-    elapsed_cross = time.perf_counter() - start_cross
-    print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
-
-    return model, metrics        
-
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -259,17 +204,12 @@ participant_ids = np.sort(np.unique(m_data))
 
 print("Total participants:", len(participant_ids))
 
-loops = []
-
-model_train_accuracies = []
-model_train_f1_scores = []
-model_test_accuracies = []
-model_test_f1_scores = []
-
 for loop in range(args.loops):
     start_loop = time.perf_counter()
         
     print("🔵 Loop: " + str(loop))
+
+    metric = {}
 
     print("🟢 Split dataset PI+M")
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
@@ -278,27 +218,37 @@ for loop in range(args.loops):
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
     print("\n")    
    
-    print("🟢 k-Fold cross validation model")
-    model, metrics = model_kfold_cross_validate(X_train, y_train, m_train, args.k_folds)
+    print("🟢 training model")
+    model = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
+    )
+
+    model.fit(X_train, y_train)
 
     print("🟢 Validate model")
     model_test_accuracy = accuracy_score(y_test, model.predict(X_test))
     model_test_f1_score = f1_score(y_test, model.predict(X_test), average='macro')
 
-    print("🟢 Append model metrics")
-    loops.append(loop)
-    model_test_accuracies.append(metrics["model_accuracy_test"])
-    model_test_f1_scores.append(metrics["model_f1_score_test"])
+    # save meta model metrics
+    metric["loop"] = loop
+
+    metric["model_accuracy_test"] = model_test_accuracy
+    metric["model_f1_score_test"] = model_test_f1_score
+
+    # add metrics to collection
+    metrics.append(metric)
 
     elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 print("🟢 Save metrics")
-df_metrics = pd.DataFrame({   
-    'loop': loops,
-    'model_accuracy': model_test_accuracies,
-    'model_f1_score': model_test_f1_scores,
-})
+df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
 mean_row = df_metrics.mean(numeric_only=True)

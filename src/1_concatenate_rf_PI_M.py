@@ -201,22 +201,17 @@ elif (args.superclases == "CPA-METS"):
     (y_data) = superclases_cpa_mets(y_data)
 
 participant_ids = np.sort(np.unique(m_data))
-
 print("Total participants:", len(participant_ids))
 
 for loop in range(args.loops):
     start_loop = time.perf_counter()
-        
     print("🔵 Loop: " + str(loop))
 
     metric = {}
 
     print("🟢 Split dataset PI+M")
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
-
-    print("\n")
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
-    print("\n")    
    
     print("🟢 training model")
     model = RandomForestClassifier(        

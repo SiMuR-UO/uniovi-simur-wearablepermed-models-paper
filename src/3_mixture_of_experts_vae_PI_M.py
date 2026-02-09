@@ -284,13 +284,6 @@ def build_encoder(input_dim, latent_dim, hidden_dim, name):
 
     return Model(inputs, [z_mean, z_log_var, z], name=name)
 
-def build_decoder(output_dim, latent_dim, hidden_dim, name):
-    inputs = Input(shape=(latent_dim,))
-    x = layers.Dense(hidden_dim, activation="relu")(inputs)
-    outputs = layers.Dense(output_dim)(x)
-
-    return Model(inputs, outputs, name=name)
-
 def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
     p_PI_val = expert_PI.predict_proba(X_PI)
     p_M_val = expert_M.predict_proba(X_M)
@@ -361,6 +354,13 @@ def reconstruction_error(model, X, batch_size=256):
     X_hat = model.predict(X, batch_size=batch_size)
 
     return np.mean((X - X_hat) ** 2, axis=1)
+
+def build_decoder(output_dim, latent_dim, hidden_dim, name):
+    inputs = Input(shape=(latent_dim,))
+    x = layers.Dense(hidden_dim, activation="relu")(inputs)
+    outputs = layers.Dense(output_dim)(x)
+
+    return Model(inputs, outputs, name=name)
 
 def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
     # Expert probabilities prediction (N,8)

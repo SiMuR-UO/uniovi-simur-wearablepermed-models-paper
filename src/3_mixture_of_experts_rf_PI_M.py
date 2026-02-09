@@ -97,7 +97,6 @@ MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve th
 MAX_FEATURES=0.2
 MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-#N_JOBS=-1
 
 metrics = []
 

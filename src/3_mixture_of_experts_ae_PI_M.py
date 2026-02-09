@@ -263,6 +263,14 @@ def objective(trial, X_train, X_validation):
 
     return min(history.history["val_loss"])
 
+def extract_latent_stats(encoder, X, batch_size=256):
+    """
+    Extract deterministic latent space from a classic Autoencoder
+    """
+    z = encoder.predict(X, batch_size=batch_size)
+
+    return z
+
 def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
     p_PI_val = expert_PI.predict_proba(X_PI)
     p_M_val = expert_M.predict_proba(X_M)
@@ -376,14 +384,6 @@ def compare_reconstruction_errors(model_PI, model_M, X_PI, X_M, file_name):
     plt.grid(True)
 
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
-
-def extract_latent_stats(encoder, X, batch_size=256):
-    """
-    Extract deterministic latent space from a classic Autoencoder
-    """
-    z = encoder.predict(X, batch_size=batch_size)
-
-    return z
 
 def compute_tsne(Z, n_components=2, perplexity=30, random_state=42):
     Z_scaled = StandardScaler().fit_transform(Z)

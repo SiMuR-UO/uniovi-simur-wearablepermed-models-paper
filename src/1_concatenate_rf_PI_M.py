@@ -242,7 +242,7 @@ for loop in range(args.loops):
     elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
-print("🟢 Save metrics")
+print("🟢 Calculate metrics mean and standard deviations")
 df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
@@ -259,6 +259,7 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
+print("🟢 Save metrics")
 df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app

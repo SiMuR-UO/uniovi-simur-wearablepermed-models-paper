@@ -350,6 +350,9 @@ def objective(trial, X_train, X_val, input_dim):
     return float(val_loss)    
 
 def extract_latent_stats(encoder, X, batch_size=256):
+    """
+    Extract gaussian latent space from a classic Autoencoder
+    """
     z_mean, z_log_var, z = encoder.predict(X, batch_size=batch_size)
     
     return z_mean, z_log_var, z

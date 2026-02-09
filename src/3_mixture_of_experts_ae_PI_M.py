@@ -377,12 +377,13 @@ def compare_reconstruction_errors(model_PI, model_M, X_PI, X_M, file_name):
 
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
 
-def get_latent(encoder, X, batch_size=256):
+def extract_latent_stats(encoder, X, batch_size=256):
     """
     Extract deterministic latent space from a classic Autoencoder
     """
-    Z = encoder.predict(X, batch_size=batch_size)
-    return Z
+    z = encoder.predict(X, batch_size=batch_size)
+
+    return z
 
 def compute_tsne(Z, n_components=2, perplexity=30, random_state=42):
     Z_scaled = StandardScaler().fit_transform(Z)
@@ -638,8 +639,8 @@ for loop in range(args.loops):
         compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
 
         print("🟢 Latent Space t-SNE plots")
-        z_PI = get_latent(encoder_PI, X_train_PI)
-        z_M  = get_latent(encoder_M, X_train_M)
+        z_PI = extract_latent_stats(encoder_PI, X_train_PI)
+        z_M  = extract_latent_stats(encoder_M, X_train_M)
 
         Z_PI_tsne = compute_tsne(z_PI)
         Z_M_tsne  = compute_tsne(z_M)

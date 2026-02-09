@@ -399,7 +399,7 @@ for loop in range(args.loops):
     moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
     print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
-    # save meta model metrics
+    print("🟢 Add metrics")
     metric["loop"] = loop
 
     metric["base_model_validate_accuracy_PI"] = acc_score_val_PI
@@ -413,15 +413,12 @@ for loop in range(args.loops):
     metric["moe_acc_hard"] = moe_acc_hard
     metric["moe_f1_weight_hard"] = moe_f1_weight_hard
 
-    # add metrics to collection
     metrics.append(metric)
 
-    elapsed_loop = time.perf_counter() - start_app
+    elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
-print("🟢 Save metrics")
-
-print("🟢 Save metrics for PI+M")
+print("🟢 Calculate metrics mean and standard deviations")
 df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
@@ -438,6 +435,7 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
+print("🟢 Save metrics")
 df_metrics.to_csv(str(Path.cwd()) + "/results/moe_rf_metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app

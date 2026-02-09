@@ -125,23 +125,7 @@ def parse_args(args):
         "--superclases",
         dest="superclases",    
         help=f"Use Superclases: Captured24, CPA-METS"
-    )
-    parser.add_argument(
-        "-step-init",
-        "--step-init",
-        dest="step_init",        
-        type=int,
-        default=6,        
-        help="Participant initial step."
-    )    
-    parser.add_argument(
-        "-step",
-        "--step",
-        dest="step",        
-        type=int,
-        default=1,        
-        help="Participant step."
-    )    
+    )  
     parser.add_argument(
         "-loops",
         "--loops",

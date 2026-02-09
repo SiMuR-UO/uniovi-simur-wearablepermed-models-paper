@@ -369,7 +369,7 @@ for loop in range(args.loops):
         plt.yticks(rotation=0)
         plt.tight_layout()
 
-        plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(n_participants) + "_participants_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
+        plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
     
     elapsed_loop = time.perf_counter() - start_app
     print(f"Loop time: {elapsed_loop:.2f} seconds")

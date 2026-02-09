@@ -7,7 +7,6 @@ import pandas as pd
 from pathlib import Path
 import optuna
 from sklearn.discriminant_analysis import StandardScaler
-from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
@@ -121,7 +120,7 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",        
-        help=f"Use Superclases: Captured24, CPA-METS"
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
     )
     parser.add_argument(
         "-loops",
@@ -408,10 +407,10 @@ for loop in range(args.loops):
     # add metrics to collection
     metrics.append(metric)
 
-    elapsed_loop = time.perf_counter() - start_app
+    elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
-print("🟢 Save metrics")
+print("🟢 Calculate metrics mean and standard deviations")
 df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
@@ -428,6 +427,7 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
+print("🟢 Save metrics")
 df_metrics.to_csv(str(Path.cwd()) + "/results/moe_ae_metrics.csv", index=False)     
 
 elapsed_app = time.perf_counter() - start_app

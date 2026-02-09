@@ -1,4 +1,5 @@
 import sys
+import time
 import argparse
 import logging
 import numpy as np
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 import optuna
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
@@ -98,6 +100,8 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
+metrics = []
+
 class VAE(Model):
     def __init__(self, encoder, decoder, beta):
         super().__init__()
@@ -167,7 +171,7 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",        
-        help=f"Use Superclases: Captured24, CPA-METS"
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
     )
     parser.add_argument(
         "-loops",
@@ -224,42 +228,37 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
+def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
     # Transporm string labels to numbers
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
     class_names = le.classes_
 
-    # Unique participants
-    unique_groups = np.unique(m_data)
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    n_total = len(unique_groups)
-    n_test = int(n_total * test_size)
-    n_val = int(n_total * val_size)
+    train_validation_idx, test_idx = next(gss_test.split(X_data, y_data, groups=m_data))
 
-    test_groups = unique_groups[:n_test]
-    val_groups = unique_groups[n_test:n_test + n_val]
-    train_groups = unique_groups[n_test + n_val:]
+    X_train_validation, X_test = X_data[train_validation_idx], X_data[test_idx]
+    y_train_validation, y_test = y_data[train_validation_idx], y_data[test_idx]
+    m_train_validation, m_test = m_data[train_validation_idx], m_data[test_idx]
 
-    # Index selection
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    val_idx   = np.where(np.isin(m_data, val_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=(val_size / (1 - test_size)))
 
-    # Split datasets
-    X_train, X_val, X_test = X_data[train_idx], X_data[val_idx], X_data[test_idx]
-    y_train, y_val, y_test = y_data[train_idx], y_data[val_idx], y_data[test_idx]
-    m_train, m_val, m_test = m_data[train_idx], m_data[val_idx], m_data[test_idx]
+    train_idx, val_idx = next(gss_val.split(X_train_validation, y_train_validation, groups=m_train_validation))
 
-    print(f"Participants → Train: {len(np.unique(m_train))}")
-    print(f"Participants → Val:   {len(np.unique(m_val))}")
-    print(f"Participants → Test:  {len(np.unique(m_test))}")
+    X_train, X_val = X_train_validation[train_idx], X_train_validation[val_idx]
+    y_train, y_val = y_train_validation[train_idx], y_train_validation[val_idx]
+    m_train, m_val = m_train_validation[train_idx], m_train_validation[val_idx]
+
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in validation:  {np.unique(m_val)}")
+    print(f"Unique participants in test:  {np.unique(m_test)}")
 
     # Split training/validation/test for M(91), PI(91)
     X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-    X_val_M,   X_val_PI   = X_val[:, :91],   X_val[:, 91:]
-    X_test_M,  X_test_PI  = X_test[:, :91],  X_test[:, 91:]
-
+    X_val_M, X_val_PI = X_val[:, :91], X_val[:, 91:]
+    X_test_M, X_test_PI = X_test[:, :91], X_test[:, 91:]
+    
     return (
         X_train_PI, X_val_PI, X_test_PI,
         X_train_M,  X_val_M,  X_test_M,
@@ -267,7 +266,7 @@ def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1)
         m_train, m_val, m_test,
         class_names
     )
-  
+
 def build_encoder(input_dim, latent_dim, hidden_dim, name):
     inputs = Input(shape=(input_dim,))
     x = layers.Dense(hidden_dim, activation="relu")(inputs)
@@ -291,30 +290,6 @@ def build_decoder(output_dim, latent_dim, hidden_dim, name):
     outputs = layers.Dense(output_dim)(x)
 
     return Model(inputs, outputs, name=name)
-
-def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
-    p_PI_val = expert_PI.predict_proba(X_PI)
-    p_M_val = expert_M.predict_proba(X_M)
-
-    # Per-sample correctness
-    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
-    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
-
-    conf_PI = p_PI_val.max(axis=1)
-    conf_M = p_M_val.max(axis=1)
-
-    gate_y = np.zeros_like(y)
-
-    mask_PI = (correct_PI == 1) & (correct_M == 0)
-    gate_y[mask_PI] = 1
-
-    mask_M = (correct_M == 1) & (correct_PI == 0)
-    gate_y[mask_M] = 0
-
-    mask_tie = (correct_PI == correct_M)
-    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
-
-    return gate_y
 
 def objective(trial, X_train, X_val, input_dim):
     latent_dim = trial.suggest_int("latent_dim", 8, 32)
@@ -351,6 +326,9 @@ def objective(trial, X_train, X_val, input_dim):
     return float(val_loss)    
 
 def extract_latent_stats(encoder, X, batch_size=256):
+    """
+    Extract gaussian latent space from a classic Autoencoder
+    """
     z_mean, z_log_var, z = encoder.predict(X, batch_size=batch_size)
     
     return z_mean, z_log_var, z
@@ -359,6 +337,65 @@ def reconstruction_error(model, X, batch_size=256):
     X_hat = model.predict(X, batch_size=batch_size)
 
     return np.mean((X - X_hat) ** 2, axis=1)
+
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+    p_PI_val = expert_PI.predict_proba(X_PI)
+    p_M_val = expert_M.predict_proba(X_M)
+
+    # Per-sample correctness
+    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
+    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
+
+    conf_PI = p_PI_val.max(axis=1)
+    conf_M = p_M_val.max(axis=1)
+
+    gate_y = np.zeros_like(y)
+
+    mask_PI = (correct_PI == 1) & (correct_M == 0)
+    gate_y[mask_PI] = 1
+
+    mask_M = (correct_M == 1) & (correct_PI == 0)
+    gate_y[mask_M] = 0
+
+    mask_tie = (correct_PI == correct_M)
+    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
+
+    return gate_y
+
+def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N,8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
+
+    # Gate probabilities prediction (N,2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+
+    # Extract expert weights (N, 1)
+    w_PI = w[:, 1].reshape(-1, 1)
+    w_M = w[:, 0].reshape(-1, 1)
+
+    # Weighted mixture
+    return w_PI * p_test_PI + w_M * p_test_M
+
+def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N, 8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
+
+    # Gate probabilities prediction (N, 2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+
+    # Choose expert per sample (top-1)
+    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
+
+    # Allocate output
+    p_final = np.zeros_like(p_test_PI)
+
+    # Fill per-sample
+    p_final[choose_PI] = p_test_PI[choose_PI]
+    p_final[~choose_PI] = p_test_M[~choose_PI]
+
+    return p_final
 
 def plot_reconstruction_error(model, X, file_name, title="Reconstruction Error"):
     X_hat = model.predict(X)
@@ -489,40 +526,7 @@ def plot_tsne_autoencoder(Z_tsne, y_train, class_names, title, file_name):
 
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")   
 
-def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
-    # Expert probabilities prediction (N,8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
-
-    # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
-
-    # Extract expert weights (N, 1)
-    w_PI = w[:, 1].reshape(-1, 1)
-    w_M = w[:, 0].reshape(-1, 1)
-
-    # Weighted mixture
-    return w_PI * p_test_PI + w_M * p_test_M
-
-def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
-    # Expert probabilities prediction (N, 8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
-
-    # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
-
-    # Choose expert per sample (top-1)
-    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
-
-    # Allocate output
-    p_final = np.zeros_like(p_test_PI)
-
-    # Fill per-sample
-    p_final[choose_PI] = p_test_PI[choose_PI]
-    p_final[~choose_PI] = p_test_M[~choose_PI]
-
-    return p_final
+start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
 
@@ -562,21 +566,12 @@ print("🟢 Split Dataset (Training/Validation/Test) for PI and M")
  m_train, m_validation, m_test,
  class_names) = participant_group_split(X_data, y_data, m_data)
 
-loops = []
-
-expert_model_test_accuracies_PI = []
-expert_model_test_f1_scores_PI = []
-expert_model_test_accuracies_M = []
-expert_model_test_f1_scores_M = []
-gate_model_test_accuracies = []
-moe_model_test_soft_accuracies = []
-moe_model_test_soft_f1_scores = []
-moe_model_test_hard_accuracies = []
-moe_model_test_hard_f1_scores = []
-
 for loop in range(args.loops):
+    start_loop = time.perf_counter()
+
+    metric = {}
+
     print("🔵 Loop: " + str(loop))
-    loops.append(loop)
 
     print("🟢 Optimize Autoencoder hyperparameters PI")
     study_PI = optuna.create_study(direction="minimize")
@@ -641,9 +636,6 @@ for loop in range(args.loops):
     acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
     f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
-    expert_model_test_accuracies_PI.append(acc_score_test_PI)
-    expert_model_test_f1_scores_PI.append(f1_score_test_PI)
-
     print("🟢 Build classifier M")
     _, _, Z_validation_M  = extract_latent_stats(encoder_M, X_validation_M)
 
@@ -656,9 +648,6 @@ for loop in range(args.loops):
     y_test_pred_M = clf_M.predict(Z_test_M)
     acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
     f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
-
-    expert_model_test_accuracies_M.append(acc_score_test_M)
-    expert_model_test_f1_scores_M.append(f1_score_test_M)
 
     print("🟢 Build gate validation datasets")
     X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
@@ -688,7 +677,6 @@ for loop in range(args.loops):
 
     gate_acc = (gate_pred == y_gate_test).mean()
 
-    gate_model_test_accuracies.append(gate_acc)
     print("Gate accuracy:", gate_acc)
 
     print("🟢 Soft Validate MoE")
@@ -698,9 +686,6 @@ for loop in range(args.loops):
 
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
-
-    moe_model_test_soft_accuracies.append(moe_acc_soft)
-    moe_model_test_soft_f1_scores.append(moe_f1_weight_soft)
 
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
@@ -712,10 +697,22 @@ for loop in range(args.loops):
     moe_acc_hard = accuracy_score(y_test, y_pred_hard)
     moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
 
-    moe_model_test_hard_accuracies.append(moe_acc_soft)
-    moe_model_test_hard_f1_scores.append(moe_f1_weight_soft)
-
     print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+
+    print("🟢 Add metrics")
+    metric["loop"] = loop
+
+    metric["expert_model_test_accuracy_PI"] = acc_score_test_PI
+    metric["expert_model_test_f1_score_PI"] = f1_score_test_PI
+    metric["expert_model_test_accuracy_M"] = acc_score_test_M
+    metric["expert_model_test_f1_score_M"] = f1_score_test_M
+    metric["gate_model_test_accuracy"] = gate_acc
+    metric["moe_model_test_soft_accuracy"] = moe_acc_soft
+    metric["moe_model_test_soft_f1_score"] = moe_f1_weight_soft
+    metric["moe_model_test_hard_accuracy"] = moe_acc_soft
+    metric["moe_model_test_hard_f1_score"] = moe_f1_weight_soft
+
+    metrics.append(metric)
 
     if args.generate_plots == True:
         print("🟢 Reconstruction plots")
@@ -737,19 +734,11 @@ for loop in range(args.loops):
         plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="VAE Latent Space (PI)", file_name="tsne_VAE_latent_PI.png")
         plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="VAE Latent Space (M)", file_name="tsne_VAE_latent_M.png")
 
-print("🟢 Save metrics")
-df_metrics = pd.DataFrame({   
-    'loop': loops,
-    'expert_model_test_accuracy_PI': expert_model_test_accuracies_PI,
-    'expert_model_test_f1_score_PI': expert_model_test_f1_scores_PI,
-    'expert_model_test_accuracy_M': expert_model_test_accuracies_M,
-    'expert_model_test_f1_score_M': expert_model_test_f1_scores_M,
-    'gate_model_test_accuracy': gate_model_test_accuracies,
-    'moe_model_test_soft_accuracy': moe_model_test_soft_accuracies,
-    'moe_model_test_soft_f1_score': moe_model_test_soft_f1_scores,
-    'moe_model_test_hard_accuracy': moe_model_test_hard_accuracies,
-    'moe_model_test_hard_f1_score': moe_model_test_hard_f1_scores,
-})
+    elapsed_loop = time.perf_counter() - start_loop
+    print(f"Loop time: {elapsed_loop:.2f} seconds") 
+
+print("🟢 Calculate metrics mean and standard deviations")
+df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
 mean_row = df_metrics.mean(numeric_only=True)
@@ -765,4 +754,8 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
-df_metrics.to_csv(str(Path.cwd()) + "/results/moe_vae_metrics.csv", index=False)         
+print("🟢 Save metrics")
+df_metrics.to_csv(str(Path.cwd()) + "/results/moe_vae_metrics.csv", index=False)
+
+elapsed_app = time.perf_counter() - start_app
+print(f"Application time: {elapsed_app:.2f} seconds")

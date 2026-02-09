@@ -124,24 +124,8 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",    
-        help=f"Use Superclases: Captured24, CPA-METS"
-    )
-    parser.add_argument(
-        "-step-init",
-        "--step-init",
-        dest="step_init",        
-        type=int,
-        default=6,        
-        help="Participant initial step."
-    )    
-    parser.add_argument(
-        "-step",
-        "--step",
-        dest="step",        
-        type=int,
-        default=1,        
-        help="Participant step."
-    )    
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
+    )  
     parser.add_argument(
         "-loops",
         "--loops",
@@ -371,7 +355,7 @@ for loop in range(args.loops):
 
         plt.savefig(str(Path.cwd()) + "/images/confusion_matrix_" + str(loop) + ".png", dpi=300, bbox_inches="tight")
     
-    elapsed_loop = time.perf_counter() - start_app
+    elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
 # Save metrics

@@ -121,7 +121,7 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",        
-        help=f"Use Superclases: Captured24, CPA-METS"
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
     )
     parser.add_argument(
         "-loops",

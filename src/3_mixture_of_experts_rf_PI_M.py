@@ -125,14 +125,6 @@ def parse_args(args):
         "--superclases",
         dest="superclases",        
         help=f"Use Superclases: Captured24, CPA-METS"
-    )    
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",
-        dest="k_folds",        
-        type=int,
-        default=3,       
-        help=f"k-Folds for train."
     )
     parser.add_argument(
         "-loops",

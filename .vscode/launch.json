@@ -13,15 +13,14 @@
             // 0-Dataset generator concatenating PI and M Datasets: 0_dataset_generator.py
 
             // 1-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
-            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
-            "--superclases", "CPA-METS",            
-            "--loops", "30",
+            //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+            //"--superclases", "CPA-METS",            
+            //"--loops", "30",
 
             // 2-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
-            //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
-            //"--superclases", "Captured24",            
-            //"--k-folds", "3",
-            //"--loops", "30",
+            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",
+            "--superclases", "Captured24",            
+            "--loops", "30",
             
             // 2-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI_M/case_PI_M_BRF_acc_gyr_8_superclasses/Modelo_5_BRF_concatenado_MM/X_y_m_final.npz",

@@ -350,6 +350,7 @@ for loop in range(args.loops):
         np.vstack([X_train_PI, X_validation_PI]), 
         np.vstack([X_train_M, X_validation_M])
     ])
+    
     y_gate_val = build_gate_router(
         expert_PI, 
         expert_M, 
@@ -357,9 +358,6 @@ for loop in range(args.loops):
         np.vstack([X_train_M, X_validation_M]),
         np.concatenate([y_train, y_validation])
     )
-
-    #X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-    #y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
 
     print("🟢 Training gate")
     gate = Pipeline([

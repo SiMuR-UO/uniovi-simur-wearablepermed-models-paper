@@ -282,31 +282,6 @@ def base_kfold_cross_validation(X_train, y_train, m_train, k):
         min_samples_leaf=MIN_SAMPLES_LEAF              
     )
 
-    # # Other way to obtain grouped cross validation
-    # scores = cross_validate(
-    #     expert_model,
-    #     X_train,
-    #     y_train,
-    #     cv=gkf,
-    #     groups=m_train,
-    #     scoring={
-    #         "accuracy": "accuracy",
-    #         "f1_macro": "f1_macro"
-    #     }
-    # )
-
-    # print("Accuracy per fold:", scores["test_accuracy"])
-    # print("F1-macro per fold:", scores["test_f1_macro"])
-
-    # print("Mean accuracy:", scores["test_accuracy"].mean())
-    # print("Mean F1-macro:", scores["test_f1_macro"].mean())
-
-    # # Create base model
-    # metrics = {
-    #     "base_model_accuracy_validate_mean": float(scores["test_accuracy"].mean()),
-    #     "base_model_f1_validate_mean": float(scores["test_f1_macro"].mean()),
-    # }
-
     expert_model.fit(X_train, y_train)
 
     return expert_model, metrics     
@@ -525,9 +500,7 @@ for loop in range(args.loops):
     moe_acc_hards.append(moe_acc_hard)
     moe_f1_weight_hards.append(moe_f1_weight_hard)
 
-
 print("🟢 Save metrics")
-# Create dataframe with metric collections
 df_metrics = pd.DataFrame({   
     'loop': loops,
     'base_model_train_accuracy_PI': base_model_train_accuracies_PI,

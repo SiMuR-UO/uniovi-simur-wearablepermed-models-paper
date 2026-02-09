@@ -5,10 +5,9 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold, cross_validate
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_validate
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
@@ -170,28 +169,17 @@ def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, test_size=0.2):
-    # split concatate dataset between train and test
-    unique_groups = np.unique(m_data)
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    n_test = int(len(unique_groups) * test_size)
-    test_groups = unique_groups[-n_test:]
-    train_groups = unique_groups[:-n_test]
+    train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
 
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]    
+    X_train, X_test = X_data[train_idx], X_data[test_idx]
+    y_train, y_test = y_data[train_idx], y_data[test_idx]
+    m_train, m_test = m_data[train_idx], m_data[test_idx]
 
-    X_train = X_data[train_idx]
-    X_test = X_data[test_idx]
-    
-    y_train = y_data[train_idx]
-    y_test = y_data[test_idx]
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    m_train = m_data[train_idx]
-    m_test = m_data[test_idx]
-
-    print(f"Participants for train: {len(np.unique(m_data[train_idx]))}")
-    print(f"Participants for test:  {len(np.unique(m_data[test_idx]))}")
-    
     return X_train, X_test, y_train, y_test, m_train, m_test
 
 def model_kfold_cross_validate(X_train, y_train, m_train, k):

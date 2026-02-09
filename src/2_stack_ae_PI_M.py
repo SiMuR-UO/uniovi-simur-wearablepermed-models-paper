@@ -11,6 +11,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GroupShuffleSplit
 from tensorflow.keras import layers, models, regularizers
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session
@@ -177,49 +178,38 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
-    # Transporm string labels to numbers
-    le = LabelEncoder()
-    y_data = le.fit_transform(y_data)
-    class_names = le.classes_
+def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    # Unique participants
-    unique_groups = np.unique(m_data)
+    train_validation_idx, test_idx = next(gss_test.split(X_data, y_data, groups=m_data))
 
-    n_total = len(unique_groups)
-    n_test = int(n_total * test_size)
-    n_val = int(n_total * val_size)
+    X_train_validation, X_test = X_data[train_validation_idx], X_data[test_idx]
+    y_train_validation, y_test = y_data[train_validation_idx], y_data[test_idx]
+    m_train_validation, m_test = m_data[train_validation_idx], m_data[test_idx]
 
-    test_groups = unique_groups[:n_test]
-    val_groups = unique_groups[n_test:n_test + n_val]
-    train_groups = unique_groups[n_test + n_val:]
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=(val_size / (1 - test_size)))
 
-    # Index selection
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    val_idx   = np.where(np.isin(m_data, val_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]
+    train_idx, val_idx = next(gss_val.split(X_train_validation, y_train_validation, groups=m_train_validation))
 
-    # Split datasets
-    X_train, X_val, X_test = X_data[train_idx], X_data[val_idx], X_data[test_idx]
-    y_train, y_val, y_test = y_data[train_idx], y_data[val_idx], y_data[test_idx]
-    m_train, m_val, m_test = m_data[train_idx], m_data[val_idx], m_data[test_idx]
+    X_train, X_val = X_train_validation[train_idx], X_train_validation[val_idx]
+    y_train, y_val = y_train_validation[train_idx], y_train_validation[val_idx]
+    m_train, m_val = m_train_validation[train_idx], m_train_validation[val_idx]
 
-    print(f"Participants → Train: {len(np.unique(m_train))}")
-    print(f"Participants → Val:   {len(np.unique(m_val))}")
-    print(f"Participants → Test:  {len(np.unique(m_test))}")
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in validation:  {np.unique(m_val)}")
+    print(f"Unique participants in test:  {np.unique(m_test)}")
 
     # Split training/validation/test for M(91), PI(91)
     X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-    X_val_M,   X_val_PI   = X_val[:, :91],   X_val[:, 91:]
-    X_test_M,  X_test_PI  = X_test[:, :91],  X_test[:, 91:]
-
+    X_val_M, X_val_PI = X_val[:, :91], X_val[:, 91:]
+    X_test_M, X_test_PI = X_test[:, :91], X_test[:, 91:]
+    
     return (
         X_train_PI, X_val_PI, X_test_PI,
         X_train_M,  X_val_M,  X_test_M,
         y_train, y_val, y_test,
-        m_train, m_val, m_test,
-        class_names
-    )
+        m_train, m_val, m_test
+    )  
 
 def build_autoencoder(input_dim, latent_dim, dropout=0.0, l2_reg=0.0):
     # Encoder
@@ -297,20 +287,21 @@ sc = StandardScaler()
 
 X_data = sc.fit_transform(X_data)
 
-print("🟢 Split stack (Training/Validation/Test)")
-(X_train_PI, X_validation_PI, X_test_PI,
- X_train_M,  X_validation_M,  X_test_M,
- y_train, y_validation, y_test,
- m_train, m_validation, m_test,
- class_names) = participant_group_split(X_data, y_data, m_data)
-
 loops = []
 
 for loop in range(args.loops):
     start_loop = time.perf_counter()
         
+    metric = {}
+
     print("🔵 Loop: " + str(loop))
     loops.append(loop)
+
+    print("🟢 Split stack (Training/Validation/Test)")
+    (X_train_PI, X_validation_PI, X_test_PI,
+    X_train_M,  X_validation_M,  X_test_M,
+    y_train, y_validation, y_test,
+    m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
 
     print("🟢 Optimize Autoencoder hyperparameters PI")
     study_PI = optuna.create_study(direction="minimize")
@@ -405,9 +396,8 @@ for loop in range(args.loops):
     meta_model_test_f1_score = f1_score(y_test, pr_meta_test, average='macro')
 
     # save meta model metrics
-    metric = {}
-
     metric["loop"] = loop
+
     metric["classifier_model_accuracy_PI"] = acc_score_validation_PI
     metric["classifier_model_f1_score_PI"] = f1_score_validation_PI
     metric["classifier_model_accuracy_M"] = acc_score_validation_M

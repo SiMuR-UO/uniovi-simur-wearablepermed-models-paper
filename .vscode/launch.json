@@ -15,7 +15,7 @@
             // 1-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
             "--stack-all", "./datasets/X_y_m_final.npz",
             "--superclases", "Captured24",            
-            "--loops", "1",
+            "--loops", "30",
 
             // 2-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

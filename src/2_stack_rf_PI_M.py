@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import GroupShuffleSplit, GridSearchCV, GroupKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression

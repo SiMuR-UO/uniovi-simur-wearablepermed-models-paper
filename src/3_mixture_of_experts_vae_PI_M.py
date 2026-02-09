@@ -284,29 +284,12 @@ def build_encoder(input_dim, latent_dim, hidden_dim, name):
 
     return Model(inputs, [z_mean, z_log_var, z], name=name)
 
-def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
-    p_PI_val = expert_PI.predict_proba(X_PI)
-    p_M_val = expert_M.predict_proba(X_M)
+def build_decoder(output_dim, latent_dim, hidden_dim, name):
+    inputs = Input(shape=(latent_dim,))
+    x = layers.Dense(hidden_dim, activation="relu")(inputs)
+    outputs = layers.Dense(output_dim)(x)
 
-    # Per-sample correctness
-    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
-    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
-
-    conf_PI = p_PI_val.max(axis=1)
-    conf_M = p_M_val.max(axis=1)
-
-    gate_y = np.zeros_like(y)
-
-    mask_PI = (correct_PI == 1) & (correct_M == 0)
-    gate_y[mask_PI] = 1
-
-    mask_M = (correct_M == 1) & (correct_PI == 0)
-    gate_y[mask_M] = 0
-
-    mask_tie = (correct_PI == correct_M)
-    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
-
-    return gate_y
+    return Model(inputs, outputs, name=name)
 
 def objective(trial, X_train, X_val, input_dim):
     latent_dim = trial.suggest_int("latent_dim", 8, 32)
@@ -355,12 +338,29 @@ def reconstruction_error(model, X, batch_size=256):
 
     return np.mean((X - X_hat) ** 2, axis=1)
 
-def build_decoder(output_dim, latent_dim, hidden_dim, name):
-    inputs = Input(shape=(latent_dim,))
-    x = layers.Dense(hidden_dim, activation="relu")(inputs)
-    outputs = layers.Dense(output_dim)(x)
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+    p_PI_val = expert_PI.predict_proba(X_PI)
+    p_M_val = expert_M.predict_proba(X_M)
 
-    return Model(inputs, outputs, name=name)
+    # Per-sample correctness
+    correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
+    correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
+
+    conf_PI = p_PI_val.max(axis=1)
+    conf_M = p_M_val.max(axis=1)
+
+    gate_y = np.zeros_like(y)
+
+    mask_PI = (correct_PI == 1) & (correct_M == 0)
+    gate_y[mask_PI] = 1
+
+    mask_M = (correct_M == 1) & (correct_PI == 0)
+    gate_y[mask_M] = 0
+
+    mask_tie = (correct_PI == correct_M)
+    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
+
+    return gate_y
 
 def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
     # Expert probabilities prediction (N,8)

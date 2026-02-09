@@ -346,8 +346,20 @@ for loop in range(args.loops):
     f1_score_val_M = f1_score(y_validation, y_validation_pred_M, average='macro') 
 
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-    y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
+    X_gate_val = np.hstack([
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M])
+    ])
+    y_gate_val = build_gate_router(
+        expert_PI, 
+        expert_M, 
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M]),
+        np.concatenate([y_train, y_validation])
+    )
+
+    #X_gate_val = np.hstack([X_validation_PI, X_validation_M])
+    #y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
 
     print("🟢 Training gate")
     gate = Pipeline([

@@ -362,6 +362,41 @@ def reconstruction_error(model, X, batch_size=256):
 
     return np.mean((X - X_hat) ** 2, axis=1)
 
+def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N,8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
+
+    # Gate probabilities prediction (N,2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+
+    # Extract expert weights (N, 1)
+    w_PI = w[:, 1].reshape(-1, 1)
+    w_M = w[:, 0].reshape(-1, 1)
+
+    # Weighted mixture
+    return w_PI * p_test_PI + w_M * p_test_M
+
+def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+    # Expert probabilities prediction (N, 8)
+    p_test_PI = expert_PI.predict_proba(X_test_PI)
+    p_test_M = expert_M.predict_proba(X_test_M)
+
+    # Gate probabilities prediction (N, 2)
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+
+    # Choose expert per sample (top-1)
+    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
+
+    # Allocate output
+    p_final = np.zeros_like(p_test_PI)
+
+    # Fill per-sample
+    p_final[choose_PI] = p_test_PI[choose_PI]
+    p_final[~choose_PI] = p_test_M[~choose_PI]
+
+    return p_final
+
 def plot_reconstruction_error(model, X, file_name, title="Reconstruction Error"):
     X_hat = model.predict(X)
     mse = np.mean((X - X_hat) ** 2, axis=1)
@@ -490,41 +525,6 @@ def plot_tsne_autoencoder(Z_tsne, y_train, class_names, title, file_name):
     plt.grid(True)
 
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")   
-
-def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
-    # Expert probabilities prediction (N,8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
-
-    # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
-
-    # Extract expert weights (N, 1)
-    w_PI = w[:, 1].reshape(-1, 1)
-    w_M = w[:, 0].reshape(-1, 1)
-
-    # Weighted mixture
-    return w_PI * p_test_PI + w_M * p_test_M
-
-def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
-    # Expert probabilities prediction (N, 8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
-
-    # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
-
-    # Choose expert per sample (top-1)
-    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
-
-    # Allocate output
-    p_final = np.zeros_like(p_test_PI)
-
-    # Fill per-sample
-    p_final[choose_PI] = p_test_PI[choose_PI]
-    p_final[~choose_PI] = p_test_M[~choose_PI]
-
-    return p_final
 
 start_app = time.perf_counter()
 

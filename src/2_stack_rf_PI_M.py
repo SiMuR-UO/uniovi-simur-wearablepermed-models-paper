@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, GroupKFold, cross_validate
+from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, GroupKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -218,50 +218,50 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
-def base_kfold_cross_validation(X_train, y_train, m_train, k):
-    start_cross = time.perf_counter()
+# def base_kfold_cross_validation(X_train, y_train, m_train, k):
+#     start_cross = time.perf_counter()
 
-    # classifier model
-    model = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    )
+#     # classifier model
+#     model = RandomForestClassifier(        
+#         n_estimators=N_ESTIMATORS,                     
+#         max_depth=MAX_DEPTH,
+#         max_features= MAX_FEATURES,                 
+#         min_samples_split=MIN_SAMPLES_SPLIT,        
+#         min_samples_leaf=MIN_SAMPLES_LEAF,
+#         n_jobs=-1,
+#         verbose=1   
+#     )
 
-    # Cross-validation strategy
-    gkf = GroupKFold(n_splits=k, shuffle=True)
+#     # Cross-validation strategy
+#     gkf = GroupKFold(n_splits=k, shuffle=True)
         
-    # Execute cross-validation       
-    cv_scores = cross_validate(
-        model,
-        X_train,
-        y_train,
-        cv=gkf,
-        groups=m_train,
-        scoring={
-            "accuracy": "accuracy",
-            "f1_macro": "f1_macro"
-        },
-        n_jobs=1
-    )
+#     # Execute cross-validation       
+#     cv_scores = cross_validate(
+#         model,
+#         X_train,
+#         y_train,
+#         cv=gkf,
+#         groups=m_train,
+#         scoring={
+#             "accuracy": "accuracy",
+#             "f1_macro": "f1_macro"
+#         },
+#         n_jobs=1
+#     )
 
-    metrics = {
-        "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
-        "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
-    }
+#     metrics = {
+#         "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
+#         "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
+#     }
 
-    # Train classifier model
-    model.fit(X_train, y_train)
+#     # Train classifier model
+#     model.fit(X_train, y_train)
 
-    # cross validation time tracking
-    elapsed_cross = time.perf_counter() - start_cross
-    print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
+#     # cross validation time tracking
+#     elapsed_cross = time.perf_counter() - start_cross
+#     print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
     
-    return model, metrics        
+#     return model, metrics        
 
 start_app = time.perf_counter()
 
@@ -310,13 +310,46 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 k-Fold train base model PI")
-    base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
-    print("\n")
+    #print("🟢 k-Fold train base model PI")
+    #base_model_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
+    #print("\n")
 
-    print("🟢 k-Fold train base model M")
-    base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
-    print("\n")
+    print("🟢 training model PI")
+    base_model_PI = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
+    )
+
+    base_model_PI.fit(X_train_PI, y_train)
+
+    print("🟢 Validate model PI")
+    model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
+    model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')    
+
+    #print("🟢 k-Fold train base model M")
+    #base_model_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
+    #print("\n")
+
+    base_model_M = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
+    )
+
+    base_model_M.fit(X_train_M, y_train)
+
+    print("🟢 Validate model M")
+    model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
+    model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
 
     print("🟢 Base predictions on training for PI and M")
     pa_tr_PI = base_model_PI.predict_proba(X_train_PI)
@@ -365,10 +398,10 @@ for loop in range(args.loops):
     # save meta model metrics
     metric["loop"] = loop
 
-    metric["base_model_accuracy_PI"] = metric_PI["model_accuracy_test"]
-    metric["base_model_f1_score_PI"] = metric_PI["model_f1_score_test"]
-    metric["base_model_accuracy_M"] = metric_M["model_accuracy_test"]
-    metric["base_model_f1_score_M"] = metric_M["model_f1_score_test"]
+    metric["base_model_accuracy_PI"] = model_test_accuracy_PI
+    metric["base_model_f1_score_PI"] = model_test_f1_score_PI
+    metric["base_model_accuracy_M"] = model_test_accuracy_M
+    metric["base_model_f1_score_M"] = model_test_f1_score_M
     metric["meta_model_accuracy"] = meta_model_test_accuracy
     metric["meta_model_f1_score"] = meta_model_test_f1_score
 

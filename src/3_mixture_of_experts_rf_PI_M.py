@@ -97,7 +97,6 @@ MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve th
 MAX_FEATURES=0.2
 MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-#N_JOBS=-1
 
 metrics = []
 
@@ -125,14 +124,6 @@ def parse_args(args):
         "--superclases",
         dest="superclases",        
         help=f"Use Superclases: Captured24, CPA-METS"
-    )    
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",
-        dest="k_folds",        
-        type=int,
-        default=3,       
-        help=f"k-Folds for train."
     )
     parser.add_argument(
         "-loops",
@@ -355,8 +346,20 @@ for loop in range(args.loops):
     f1_score_val_M = f1_score(y_validation, y_validation_pred_M, average='macro') 
 
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-    y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
+    X_gate_val = np.hstack([
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M])
+    ])
+    y_gate_val = build_gate_router(
+        expert_PI, 
+        expert_M, 
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M]),
+        np.concatenate([y_train, y_validation])
+    )
+
+    #X_gate_val = np.hstack([X_validation_PI, X_validation_M])
+    #y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
 
     print("🟢 Training gate")
     gate = Pipeline([

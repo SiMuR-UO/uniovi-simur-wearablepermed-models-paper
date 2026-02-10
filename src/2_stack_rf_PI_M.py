@@ -197,9 +197,12 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
 def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
     gkf = GroupKFold(n_splits=n_folds)
 
+    X_proba_all = []
     y_proba_all = []
-    y_true_all = []
-    m_true_all = []
+    m_proba_all = []
+
+    model_acc_scores = []
+    model_f1_scores = []
 
     for fold, (train_idx, test_idx) in enumerate(gkf.split(X_data, y_data, m_data), start=1):
         X_train, X_test = X_data[train_idx], X_data[test_idx]
@@ -215,23 +218,25 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
 
         # Predict / evaluate
         y_pred = model.predict(X_test)
-        y_true_all.append(y_test)
-        m_true_all.append(m_test)
+        y_proba_all.append(y_test)
+        m_proba_all.append(m_test)
 
-        model_acc_score = accuracy_score(y_test, y_pred)
-        model_f1_score = f1_score(y_test, y_pred, average='macro')
+        model_acc_scores.append(accuracy_score(y_test, y_pred))
+        model_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
 
-        # Create proba
-        y_proba = model.predict_proba(X_test)
-        
-        y_proba_all.append(y_proba)
+        # Create probabilistic distribution
+        X_proba = model.predict_proba(X_test)
+        X_proba_all.append(X_proba)
 
     # Concatenate across folds
+    X_proba_all = np.concatenate(X_proba_all, axis=0)
     y_proba_all = np.concatenate(y_proba_all, axis=0)
-    y_true_all = np.concatenate(y_true_all, axis=0)
-    m_true_all = np.concatenate(m_true_all, axis=0)
+    m_proba_all = np.concatenate(m_proba_all, axis=0)
 
-    return y_proba_all, y_true_all, m_true_all
+    model_acc_score_mean = float(np.mean(model_acc_scores))
+    model_f1_score_mean = float(np.mean(model_f1_scores))
+
+    return X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
 
 start_app = time.perf_counter()
 
@@ -280,7 +285,7 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 Train model PI")
+    print("🟢 Create model PI")
     base_model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -291,13 +296,13 @@ for loop in range(args.loops):
         verbose=1   
     )
 
-    base_model_PI.fit(X_train_PI, y_train)
+    #base_model_PI.fit(X_train_PI, y_train)
 
-    print("🟢 Test model PI")
-    model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
-    model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
+    #print("🟢 Test model PI")
+    #model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
+    #model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
 
-    print("🟢 Train model M")
+    print("🟢 Create model M")
     base_model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -308,17 +313,25 @@ for loop in range(args.loops):
         verbose=1   
     )
 
-    base_model_M.fit(X_train_M, y_train)
+    ##base_model_M.fit(X_train_M, y_train)
 
-    print("🟢 Test model M")
-    model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
-    model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
+    #print("🟢 Test model M")
+    ##model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
+    ##model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
     
     print("🟢 Cross Training for PI")
-    (p_X_tr_PI, p_y_tr, p_m_tr) = participant_cross_training(base_model_PI, X_train_PI, y_train, m_train)
+    (p_X_tr_PI,
+     p_y_tr,
+     p_m_tr,
+     model_test_accuracy_PI,
+     model_test_f1_score_PI) = participant_cross_training(base_model_PI, X_train_PI, y_train, m_train)
 
     print("🟢 Cross Training for M")
-    (p_X_tr_M, p_y_tr, p_m_tr) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
+    (p_X_tr_M,
+    p_y_tr,
+    p_m_tr,
+    model_test_accuracy_M,
+    model_test_f1_score_M) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
     #p_tr_PI = base_model_PI.predict_proba(X_train_PI)

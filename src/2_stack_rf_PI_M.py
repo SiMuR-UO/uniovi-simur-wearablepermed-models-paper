@@ -194,28 +194,44 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
-def test_cross_predict(model, X_train, y_train, m_data, test_size=0.25, n_splits=3):
-    gss = GroupShuffleSplit(n_splits=n_splits, test_size=test_size)
+def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
+    gkf = GroupKFold(n_splits=n_folds)
 
-    for train_idx, predict_idx in gss.split(X_train, y_train, m_data):
-        X_train_predict_proba.append(model.predict_proba(y_train[predict_idx]))
+    y_proba_all = []
+    y_true_all = []
+    m_true_all = []
+
+    for fold, (train_idx, test_idx) in enumerate(gkf.split(X_data, y_data, m_data), start=1):
+        X_train, X_test = X_data[train_idx], X_data[test_idx]
+        y_train, y_test = y_data[train_idx], y_data[test_idx]
+        m_train, m_test = m_data[train_idx], y_data[test_idx]
+
+        print(f"\n=== Fold {fold} ===")
+        print("Train groups:", np.unique(m_train))
+        print("Test groups: ", np.unique(m_test))
+
+        # train
+        model.fit(X_train, y_train)
+
+        # Predict / evaluate
+        y_pred = model.predict(X_test)
+        y_true_all.append(y_test)
+        m_true_all.append(m_test)
+
+        model_acc_score = accuracy_score(y_test, y_pred)
+        model_f1_score = f1_score(y_test, y_pred, average='macro')
+
+        # Create proba
+        y_proba = model.predict_proba(X_test)
         
-        print(f"Unique participants in training:  {np.unique(m_data[train_idx])}")
-        print(f"Unique participants in prediction:  {np.unique(m_data[predict_idx])}")
-    
-    return X_train_predict_proba
+        y_proba_all.append(y_proba)
 
-def cross_predict(model, X_train, y_train, m_data, test_size=0.25, n_splits=3):
-    gss = GroupShuffleSplit(n_splits=n_splits, test_size=test_size)
+    # Concatenate across folds
+    y_proba_all = np.concatenate(y_proba_all, axis=0)
+    y_true_all = np.concatenate(y_true_all, axis=0)
+    m_true_all = np.concatenate(m_true_all, axis=0)
 
-    X_train_predict_proba = []
-
-    for train_idx, predict_idx in gss.split(X_train, y_train, m_data):
-        X_train_predict_proba.append(model.predict_proba(y_train[predict_idx]))
-        
-        print(f"Unique participants in prediction:  {np.unique(m_data[predict_idx])}")
-    
-    return X_train_predict_proba
+    return y_proba_all, y_true_all, m_true_all
 
 start_app = time.perf_counter()
 
@@ -297,12 +313,18 @@ for loop in range(args.loops):
     print("🟢 Test model M")
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
+    
+    print("🟢 Cross Training for PI")
+    (p_X_tr_PI, p_y_tr, p_m_tr) = participant_cross_training(base_model_PI, X_train_PI, y_train, m_train)
+
+    print("🟢 Cross Training for M")
+    (p_X_tr_M, p_y_tr, p_m_tr) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
-    pa_tr_PI = base_model_PI.predict_proba(X_train_PI)
-    pb_tr_M = base_model_M.predict_proba(X_train_M)
+    #p_tr_PI = base_model_PI.predict_proba(X_train_PI)
+    #p_tr_M = base_model_M.predict_proba(X_train_M)
     
-    stack_X_tr = np.hstack([pa_tr_PI, pb_tr_M])
+    stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Optimize meta model hyperparameters")
     pipe = Pipeline([
@@ -327,7 +349,8 @@ for loop in range(args.loops):
     ) 
 
     print("🟢 Train meta model with concatenated probability distribution from PI and M")
-    grid.fit(stack_X_tr, y_train, groups=m_train)
+    #grid.fit(stack_X_tr, y_train, groups=m_train)
+    grid.fit(stack_X_tr, p_y_tr, groups=p_m_tr)
     model_meta = grid.best_estimator_
 
     print("Best params:", grid.best_params_)

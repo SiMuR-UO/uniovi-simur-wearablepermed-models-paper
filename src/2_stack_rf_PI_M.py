@@ -328,10 +328,10 @@ for loop in range(args.loops):
 
     print("🟢 Cross Training for M")
     (p_X_tr_M,
-    p_y_tr,
-    p_m_tr,
-    model_test_accuracy_M,
-    model_test_f1_score_M) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
+     p_y_tr,
+     p_m_tr,
+     model_test_accuracy_M,
+     model_test_f1_score_M) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
     #p_tr_PI = base_model_PI.predict_proba(X_train_PI)

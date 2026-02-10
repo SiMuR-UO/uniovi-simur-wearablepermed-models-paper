@@ -298,12 +298,6 @@ for loop in range(args.loops):
         n_jobs=-1,
         verbose=1   
     )
-
-    #base_model_PI.fit(X_train_PI, y_train)
-
-    #print("🟢 Test model PI")
-    #model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
-    #model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
     
     print("🟢 Cross Training for PI")
     (base_model_PI,
@@ -322,13 +316,7 @@ for loop in range(args.loops):
         min_samples_leaf=MIN_SAMPLES_LEAF,
         n_jobs=-1,
         verbose=1   
-    )
-
-    ##base_model_M.fit(X_train_M, y_train)
-
-    #print("🟢 Test model M")
-    ##model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
-    ##model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
+    ) 
 
     print("🟢 Cross Training for M")
     (base_model_M,
@@ -339,8 +327,6 @@ for loop in range(args.loops):
      model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
-    #p_tr_PI = base_model_PI.predict_proba(X_train_PI)
-    #p_tr_M = base_model_M.predict_proba(X_train_M)
     
     stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
 
@@ -367,7 +353,6 @@ for loop in range(args.loops):
     ) 
 
     print("🟢 Train meta model with concatenated probability distribution from PI and M")
-    #grid.fit(stack_X_tr, y_train, groups=m_train)
     grid.fit(stack_X_tr, p_y_tr, groups=p_m_tr)
     model_meta = grid.best_estimator_
 

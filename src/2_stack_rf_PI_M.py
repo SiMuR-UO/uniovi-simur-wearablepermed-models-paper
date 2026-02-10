@@ -207,7 +207,7 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
     for fold, (train_idx, test_idx) in enumerate(gkf.split(X_data, y_data, m_data), start=1):
         X_train, X_test = X_data[train_idx], X_data[test_idx]
         y_train, y_test = y_data[train_idx], y_data[test_idx]
-        m_train, m_test = m_data[train_idx], y_data[test_idx]
+        m_train, m_test = m_data[train_idx], m_data[test_idx]
 
         print(f"\n=== Fold {fold} ===")
         print("Train groups:", np.unique(m_train))

@@ -194,6 +194,45 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
+def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
+    gkf = GroupKFold(n_splits=n_folds)
+
+    y_proba_all = []
+    y_true_all = []
+    m_true_all = []
+
+    for fold, (train_idx, test_idx) in enumerate(gkf.split(X_data, y_data, m_data), start=1):
+        X_train, X_test = X_data[train_idx], X_data[test_idx]
+        y_train, y_test = y_data[train_idx], y_data[test_idx]
+        m_train, m_test = m_data[train_idx], y_data[test_idx]
+
+        print(f"\n=== Fold {fold} ===")
+        print("Train groups:", np.unique(m_train))
+        print("Test groups: ", np.unique(m_test))
+
+        # train
+        model.fit(X_train, y_train)
+
+        # Predict / evaluate
+        y_pred = model.predict(X_test)
+        y_true_all.append(y_test)
+        m_true_all.append(m_test)
+
+        model_acc_score = accuracy_score(y_test, y_pred)
+        model_f1_score = f1_score(y_test, y_pred, average='macro')
+
+        # Create proba
+        y_proba = model.predict_proba(X_test)
+        
+        y_proba_all.append(y_proba)
+
+    # Concatenate across folds
+    y_proba_all = np.concatenate(y_proba_all, axis=0)
+    y_true_all = np.concatenate(y_true_all, axis=0)
+    m_true_all = np.concatenate(m_true_all, axis=0)
+
+    return y_proba_all, y_true_all, m_true_all
+
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -241,7 +280,7 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 training model PI")
+    print("🟢 Train model PI")
     base_model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -254,10 +293,11 @@ for loop in range(args.loops):
 
     base_model_PI.fit(X_train_PI, y_train)
 
-    print("🟢 Validate model PI")
+    print("🟢 Test model PI")
     model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
     model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
 
+    print("🟢 Train model M")
     base_model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -270,15 +310,21 @@ for loop in range(args.loops):
 
     base_model_M.fit(X_train_M, y_train)
 
-    print("🟢 Validate model M")
+    print("🟢 Test model M")
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
+    
+    print("🟢 Cross Training for PI")
+    (p_X_tr_PI, p_y_tr, p_m_tr) = participant_cross_training(base_model_PI, X_train_PI, y_train, m_train)
+
+    print("🟢 Cross Training for M")
+    (p_X_tr_M, p_y_tr, p_m_tr) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
-    pa_tr_PI = base_model_PI.predict_proba(X_train_PI)
-    pb_tr_M = base_model_M.predict_proba(X_train_M)
+    #p_tr_PI = base_model_PI.predict_proba(X_train_PI)
+    #p_tr_M = base_model_M.predict_proba(X_train_M)
     
-    stack_X_tr = np.hstack([pa_tr_PI, pb_tr_M])
+    stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Optimize meta model hyperparameters")
     pipe = Pipeline([
@@ -303,13 +349,14 @@ for loop in range(args.loops):
     ) 
 
     print("🟢 Train meta model with concatenated probability distribution from PI and M")
-    grid.fit(stack_X_tr, y_train, groups=m_train)
+    #grid.fit(stack_X_tr, y_train, groups=m_train)
+    grid.fit(stack_X_tr, p_y_tr, groups=p_m_tr)
     model_meta = grid.best_estimator_
 
     print("Best params:", grid.best_params_)
     print("Best CV accuracy:", grid.best_score_)
 
-    print("🟢 Validate meta model")
+    print("🟢 Test meta model")
     pa_te_PI = base_model_PI.predict_proba(X_test_PI)
     pb_te_M = base_model_M.predict_proba(X_test_M)
     

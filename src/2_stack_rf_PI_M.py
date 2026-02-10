@@ -236,7 +236,10 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
     model_acc_score_mean = float(np.mean(model_acc_scores))
     model_f1_score_mean = float(np.mean(model_f1_scores))
 
-    return X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
+    # train the model
+    model.fit(X_data, y_data)
+
+    return model, X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
 
 start_app = time.perf_counter()
 
@@ -286,7 +289,7 @@ for loop in range(args.loops):
     print("\n")
 
     print("🟢 Create model PI")
-    base_model_PI = RandomForestClassifier(        
+    model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
         max_features= MAX_FEATURES,                 
@@ -301,9 +304,17 @@ for loop in range(args.loops):
     #print("🟢 Test model PI")
     #model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
     #model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
+    
+    print("🟢 Cross Training for PI")
+    (base_model_PI,
+     p_X_tr_PI,
+     p_y_tr,
+     p_m_tr,
+     model_test_accuracy_PI,
+     model_test_f1_score_PI) = participant_cross_training(model_PI, X_train_PI, y_train, m_train)
 
     print("🟢 Create model M")
-    base_model_M = RandomForestClassifier(        
+    model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
         max_features= MAX_FEATURES,                 
@@ -318,20 +329,14 @@ for loop in range(args.loops):
     #print("🟢 Test model M")
     ##model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     ##model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
-    
-    print("🟢 Cross Training for PI")
-    (p_X_tr_PI,
-     p_y_tr,
-     p_m_tr,
-     model_test_accuracy_PI,
-     model_test_f1_score_PI) = participant_cross_training(base_model_PI, X_train_PI, y_train, m_train)
 
     print("🟢 Cross Training for M")
-    (p_X_tr_M,
+    (base_model_M,
+     p_X_tr_M,
      p_y_tr,
      p_m_tr,
      model_test_accuracy_M,
-     model_test_f1_score_M) = participant_cross_training(base_model_M, X_train_M, y_train, m_train)
+     model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
 
     print("🟢 Base predictions on training for PI and M")
     #p_tr_PI = base_model_PI.predict_proba(X_train_PI)

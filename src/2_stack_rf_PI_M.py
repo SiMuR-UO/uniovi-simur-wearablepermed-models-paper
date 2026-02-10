@@ -194,6 +194,29 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
+def test_cross_predict(model, X_train, y_train, m_data, test_size=0.25, n_splits=3):
+    gss = GroupShuffleSplit(n_splits=n_splits, test_size=test_size)
+
+    for train_idx, predict_idx in gss.split(X_train, y_train, m_data):
+        X_train_predict_proba.append(model.predict_proba(y_train[predict_idx]))
+        
+        print(f"Unique participants in training:  {np.unique(m_data[train_idx])}")
+        print(f"Unique participants in prediction:  {np.unique(m_data[predict_idx])}")
+    
+    return X_train_predict_proba
+
+def cross_predict(model, X_train, y_train, m_data, test_size=0.25, n_splits=3):
+    gss = GroupShuffleSplit(n_splits=n_splits, test_size=test_size)
+
+    X_train_predict_proba = []
+
+    for train_idx, predict_idx in gss.split(X_train, y_train, m_data):
+        X_train_predict_proba.append(model.predict_proba(y_train[predict_idx]))
+        
+        print(f"Unique participants in prediction:  {np.unique(m_data[predict_idx])}")
+    
+    return X_train_predict_proba
+
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -241,7 +264,7 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 training model PI")
+    print("🟢 Train model PI")
     base_model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -254,10 +277,11 @@ for loop in range(args.loops):
 
     base_model_PI.fit(X_train_PI, y_train)
 
-    print("🟢 Validate model PI")
+    print("🟢 Test model PI")
     model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
     model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
 
+    print("🟢 Train model M")
     base_model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
@@ -270,7 +294,7 @@ for loop in range(args.loops):
 
     base_model_M.fit(X_train_M, y_train)
 
-    print("🟢 Validate model M")
+    print("🟢 Test model M")
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')  
 
@@ -309,7 +333,7 @@ for loop in range(args.loops):
     print("Best params:", grid.best_params_)
     print("Best CV accuracy:", grid.best_score_)
 
-    print("🟢 Validate meta model")
+    print("🟢 Test meta model")
     pa_te_PI = base_model_PI.predict_proba(X_test_PI)
     pb_te_M = base_model_M.predict_proba(X_test_M)
     

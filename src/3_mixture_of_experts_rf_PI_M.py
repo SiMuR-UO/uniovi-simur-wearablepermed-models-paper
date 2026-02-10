@@ -309,7 +309,7 @@ for loop in range(args.loops):
     y_train, y_validation, y_test,
     m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
 
-    print("🟢 train expert model PI")
+    print("🟢 Train expert model PI")
     expert_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH, 
@@ -322,12 +322,13 @@ for loop in range(args.loops):
 
     expert_PI.fit(X_train_PI, y_train)
 
-    print("🟢 validation expert model PI")
+    print("🟢 Test expert model PI")
     y_validation_pred_PI = expert_PI.predict(X_validation_PI)
+
     acc_score_val_PI = accuracy_score(y_validation, y_validation_pred_PI)
     f1_score_val_PI = f1_score(y_validation, y_validation_pred_PI, average='macro') 
 
-    print("🟢 train validation expert model M")
+    print("🟢 Train expert model M")
     expert_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH, 
@@ -340,8 +341,9 @@ for loop in range(args.loops):
 
     expert_M.fit(X_train_M, y_train)
 
-    print("🟢 validation expert model PI")
+    print("🟢 Test expert model PI")
     y_validation_pred_M = expert_M.predict(X_validation_M)
+
     acc_score_val_M = accuracy_score(y_validation, y_validation_pred_M)
     f1_score_val_M = f1_score(y_validation, y_validation_pred_M, average='macro') 
 
@@ -371,7 +373,7 @@ for loop in range(args.loops):
 
     gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Validate gate")
+    print("🟢 Test gate")
     X_gate_test = np.hstack([X_test_PI, X_test_M])
     y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
 
@@ -381,7 +383,7 @@ for loop in range(args.loops):
     gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
     print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
 
-    print("🟢 Soft Validate MoE")
+    print("🟢 Soft Test MoE")
     p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
 
     y_pred_soft = p_final_soft.argmax(axis=1)
@@ -390,7 +392,7 @@ for loop in range(args.loops):
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Validate MoE")
+    print("🟢 Hard Test MoE")
     p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
 
     y_pred_hard = p_final_hard.argmax(axis=1)

@@ -216,17 +216,18 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
         # train
         model.fit(X_train, y_train)
 
-        # Predict / evaluate
+        # Predict
         y_pred = model.predict(X_test)
         y_proba_all.append(y_test)
         m_proba_all.append(m_test)
 
-        model_acc_scores.append(accuracy_score(y_test, y_pred))
-        model_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
-
-        # Create probabilistic distribution
+        # Predict probabilistic distribution
         X_proba = model.predict_proba(X_test)
         X_proba_all.append(X_proba)
+        
+        # test
+        model_acc_scores.append(accuracy_score(y_test, y_pred))
+        model_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
 
     # Concatenate across folds
     X_proba_all = np.concatenate(X_proba_all, axis=0)

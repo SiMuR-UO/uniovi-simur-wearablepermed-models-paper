@@ -224,7 +224,7 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
         # Predict probabilistic distribution
         X_proba = model.predict_proba(X_test)
         X_proba_all.append(X_proba)
-        
+
         # test
         model_acc_scores.append(accuracy_score(y_test, y_pred))
         model_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
@@ -327,8 +327,10 @@ for loop in range(args.loops):
      model_test_accuracy_M,
      model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
 
+    print("🟢 Get correlation between PI and M Probabilistics Distributions")
+    print("Correlation of the first column in the Probabilistics Distribution: " + str(np.corrcoef(p_X_tr_PI[:,1], p_X_tr_M[:,1])))
+
     print("🟢 Base predictions on training for PI and M")
-    
     stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Optimize meta model hyperparameters")
@@ -353,12 +355,25 @@ for loop in range(args.loops):
         n_jobs=-1
     ) 
 
-    print("🟢 Train meta model with concatenated probability distribution from PI and M")
+    print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
     grid.fit(stack_X_tr, p_y_tr, groups=p_m_tr)
     model_meta = grid.best_estimator_
 
     print("Best params:", grid.best_params_)
     print("Best CV accuracy:", grid.best_score_)
+
+    # print("🟢 Train meta model (RF with fix hyperparameters) with concatenated probability distribution from PI and M")
+    # model_meta = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH,
+    #     max_features= MAX_FEATURES,                 
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1   
+    # )
+
+    # model_meta.fit(stack_X_tr, p_y_tr)
 
     print("🟢 Test meta model")
     pa_te_PI = base_model_PI.predict_proba(X_test_PI)

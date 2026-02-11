@@ -63,11 +63,13 @@ df_f1_scores.to_csv(str(Path.cwd()) + "/results/metrics_f1_scores.csv", index=Fa
 print("🟢 Create box-and-whisker plot")
 plt.figure(figsize=(8, 5))
 
-plt.boxplot(
-    df_f1_scores.values,
-    labels=df_f1_scores.columns,
-    showmeans=True  # optional: show mean marker
-)
+ax_boxplot = plt.boxplot(
+                df_f1_scores.values,
+                labels=df_f1_scores.columns,
+                showmeans=True,
+                notch=True,
+                patch_artist=True
+            )
 
 plt.title("Model F1 Score Comparison")
 plt.ylabel("F1 Score")

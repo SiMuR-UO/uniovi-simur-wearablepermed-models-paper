@@ -66,38 +66,55 @@ df_15 = pd.DataFrame({
 print("🟢 Create box-and-whisker plot")
 fig, (ax_4, ax_8, ax_15) = plt.subplots(3, 1, figsize=(8, 10))
 
-ax_4.boxplot(
-    df_4.values,
-    labels=df_4.columns,
-    showmeans=True
-)
+ax_4_boxplot = ax_4.boxplot(
+                        df_4.values,
+                        labels=df_4.columns,
+                        showmeans=True,
+                        notch=True,
+                        patch_artist=True
+                    )
 ax_4.set_title('Model F1 Score Comparison for 4 Classes')
 ax_4.set_ylabel('F1 Score')
 ax_4.grid(axis='y')
 ax_4.tick_params(axis='x', labelrotation=45)
 
-ax_8.boxplot(
-    df_8.values,
-    labels=df_8.columns,
-    showmeans=True
-)
+ax_8_boxplot = ax_8.boxplot(
+                    df_8.values,
+                    labels=df_8.columns,
+                    showmeans=True,
+                    notch=True,
+                    patch_artist=True
+                )
 
 ax_8.set_title('Model F1 Score Comparison for 8 Classes')
 ax_8.set_ylabel('F1 Score')
 ax_8.grid(axis='y')
 ax_8.tick_params(axis='x', labelrotation=45)
 
-ax_15.boxplot(
-    df_15.values,
-    labels=df_15.columns,
-    showmeans=True
-)
+ax_15_boxplot = ax_15.boxplot(
+                    df_15.values,
+                    labels=df_15.columns,
+                    showmeans=True,
+                    notch=True,
+                    patch_artist=True
+                )
 
 ax_15.set_title('Model F1 Score Comparison for 15 Classes')
 ax_15.set_ylabel('F1 Score')
 ax_15.grid(axis='y')
 ax_15.tick_params(axis='x', labelrotation=45)
 
+# fill with colors
+colors = ['#e9162d', '#f28200', '#ffdb28', '#1fb819', '#00e1da', '#007bd8', '#8f2be7', '#fb4fd9']
+for patch, color in zip(ax_4_boxplot['boxes'], colors):
+    patch.set_facecolor(color)
+
+for patch, color in zip(ax_8_boxplot['boxes'], colors):
+    patch.set_facecolor(color)
+
+for patch, color in zip(ax_15_boxplot['boxes'], colors):
+    patch.set_facecolor(color)
+    
 plt.tight_layout()
 
 print("🟢 Save box-and-whisker plot")

@@ -168,6 +168,14 @@ def parse_args(args):
     )
 
     return parser.parse_args(args)
+
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
     
 def pretreatment(y_data):
     # Get indices of elements to remove
@@ -669,7 +677,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/results/moe_ae_metrics.csv", index=False)     
+df_metrics.to_csv(str(Path.cwd()) + "/paper/4_moe_ae/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

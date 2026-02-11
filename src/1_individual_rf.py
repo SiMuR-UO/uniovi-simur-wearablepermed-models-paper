@@ -106,7 +106,7 @@ def parse_args(args):
     Returns:
       :obj:`argparse.Namespace`: command line parameters namespace
     """
-    parser = argparse.ArgumentParser(description="Cascading Random Forest Model")
+    parser = argparse.ArgumentParser(description="Individual Random Forest Model")
     parser.add_argument(
         "-stack-all",
         "--stack-all",
@@ -119,7 +119,14 @@ def parse_args(args):
         "--superclases",
         dest="superclases",    
         help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
-    )       
+    )
+    parser.add_argument(
+        "-segment-body",
+        "--segment-body",
+        required=True,
+        dest="segment_body",    
+        help=f"Segment Body: PI, M"
+    )           
     parser.add_argument(
         "-loops",
         "--loops",
@@ -146,6 +153,14 @@ def parse_args(args):
     )    
     return parser.parse_args(args)
 
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
+
 def pretreatment(y_data):
     # Get indices of elements to remove
     indices_to_remove = [i for i, lbl in enumerate(y_data) if lbl in ACTIVITIES_TO_BE_REMOVED]
@@ -158,7 +173,7 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, test_size=0.2):
+def participant_group_split(X_data, y_data, m_data, segment_body, test_size=0.2):
     gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
     train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
@@ -170,7 +185,19 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     print(f"Unique participants in train: {np.unique(m_train)}")
     print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    return X_train, X_test, y_train, y_test, m_train, m_test
+    # split concatate dataset between PI and M
+    X_train_M = X_train[:, :91]
+    X_train_PI = X_train[:, 91:]
+
+    X_test_M = X_test[:, :91]
+    X_test_PI = X_test[:, 91:]
+    
+    if segment_body == 'PI':
+        return X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
+    elif segment_body == 'M':
+        return X_train_M, X_test_M, y_train, y_test, m_train, m_test
+    else:
+        raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
 
 start_app = time.perf_counter()
 
@@ -210,7 +237,7 @@ for loop in range(args.loops):
     metric = {}
 
     print("🟢 Split dataset PI+M")
-    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
+    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
     print("🟢 training model")
@@ -260,7 +287,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_" + args.segment_body.lower() + ".csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

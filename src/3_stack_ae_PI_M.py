@@ -436,7 +436,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_ae/" + get_save_path(args.superclases) + "/metrics_" + args.segment_body.lower() + ".csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_ae/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

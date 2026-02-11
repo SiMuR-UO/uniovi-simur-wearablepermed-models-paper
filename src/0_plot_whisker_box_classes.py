@@ -64,7 +64,7 @@ df_15 = pd.DataFrame({
 })
 
 print("🟢 Create box-and-whisker plot")
-fig, (ax_4, ax_8, ax_15) = plt.subplots(3, 1, figsize=(8, 10))
+fig, (ax_4, ax_8, ax_15) = plt.subplots(3, 1, figsize=(8, 15))
 
 ax_4_boxplot = ax_4.boxplot(
                         df_4.values,

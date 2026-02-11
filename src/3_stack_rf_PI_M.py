@@ -298,7 +298,7 @@ for loop in range(args.loops):
     print("\n")
 
     print("🟢 Create model PI")
-    model_PI = RandomForestClassifier(        
+    base_model_PI = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
         max_features= MAX_FEATURES,                 
@@ -308,28 +308,28 @@ for loop in range(args.loops):
         verbose=1   
     )
     
-    print("🟢 Cross Training model PI")
-    (base_model_PI,
-     p_X_tr_PI,
-     p_y_tr,
-     p_m_tr,
-     model_test_accuracy_PI,
-     model_test_f1_score_PI) = participant_cross_training(model_PI, X_train_PI, y_train, m_train)
+    # print("🟢 Cross Training model PI")
+    # (base_model_PI,
+    #  p_X_tr_PI,
+    #  p_y_tr,
+    #  p_m_tr,
+    #  model_test_accuracy_PI,
+    #  model_test_f1_score_PI) = participant_cross_training(model_PI, X_train_PI, y_train, m_train)
 
-    # print("🟢 Train model PI")
-    # base_model_PI.fit(X_train_PI, y_train)
+    print("🟢 Train model PI")
+    base_model_PI.fit(X_train_PI, y_train)
 
-    # print("🟢 Test model PI")
-    # model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
-    # model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
+    print("🟢 Test model PI")
+    model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
+    model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
     
-    # print("🟢 Base predictions model PI")
-    # p_X_tr_PI = base_model_PI.predict_proba(X_train_PI)
-    # p_y_tr = y_train
-    # p_m_tr = m_train
+    print("🟢 Base predictions model PI")
+    p_X_tr_PI = base_model_PI.predict_proba(X_train_PI)
+    p_y_tr = y_train
+    p_m_tr = m_train
 
     print("🟢 Create model M")
-    model_M = RandomForestClassifier(        
+    base_model_M = RandomForestClassifier(        
         n_estimators=N_ESTIMATORS,                     
         max_depth=MAX_DEPTH,
         max_features= MAX_FEATURES,                 
@@ -339,25 +339,25 @@ for loop in range(args.loops):
         verbose=1   
     ) 
 
-    print("🟢 Cross Training model M")
-    (base_model_M,
-     p_X_tr_M,
-     p_y_tr,
-     p_m_tr,
-     model_test_accuracy_M,
-     model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
+    # print("🟢 Cross Training model M")
+    # (base_model_M,
+    #  p_X_tr_M,
+    #  p_y_tr,
+    #  p_m_tr,
+    #  model_test_accuracy_M,
+    #  model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
 
-    # print("🟢 Train model M")
-    # base_model_M.fit(X_train_M, y_train)
+    print("🟢 Train model M")
+    base_model_M.fit(X_train_M, y_train)
 
-    # print("🟢 Test model M")
-    # model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
-    # model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
+    print("🟢 Test model M")
+    model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
+    model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
 
-    # print("🟢 Base predictions model M")
-    # p_X_tr_M = base_model_M.predict_proba(X_train_M)
-    # p_y_tr = y_train
-    # p_m_tr = m_train
+    print("🟢 Base predictions model M")
+    p_X_tr_M = base_model_M.predict_proba(X_train_M)
+    p_y_tr = y_train
+    p_m_tr = m_train
 
     print("🟢 Get correlation between PI and M Probabilistics Distributions")
     print("Correlation of the first column in the Probabilistics Distribution: " + str(np.corrcoef(p_X_tr_PI[:,1], p_X_tr_M[:,1])))
@@ -475,7 +475,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_rf/" + get_save_path(args.superclases) + "/metrics_" + args.segment_body.lower() + ".csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_rf/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

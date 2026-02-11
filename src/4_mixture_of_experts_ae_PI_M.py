@@ -511,6 +511,9 @@ for loop in range(args.loops):
 
     autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
 
+    print("🟢 Freeze Encoder M")
+    encoder_PI.trainable = False
+
     print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
 
@@ -520,6 +523,9 @@ for loop in range(args.loops):
     clear_session()
 
     autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    
+    print("🟢 Freeze Encoder M")
+    encoder_M.trainable = False
 
     print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
@@ -547,34 +553,34 @@ for loop in range(args.loops):
     print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
 
     print("🟢 Build classifier PI")
-    Z_validation_PI = encoder_PI.predict(X_validation_PI)
+    Z_train_PI = encoder_PI.predict(X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)
-    clf_PI.fit(Z_validation_PI, y_validation)
+    clf_PI.fit(Z_train_PI, y_train)
 
-    print("🟢 Validate classifier PI")
-    Z_test_PI = encoder_PI.predict(X_test_PI)
+    print("🟢 Test classifier PI")
+    Z_validation_PI = encoder_PI.predict(X_validation_PI)
 
-    y_test_pred_PI = clf_PI.predict(Z_test_PI)
-    acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
-    f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
+    y_validation_pred_PI = clf_PI.predict(Z_validation_PI)
+    acc_score_test_PI = accuracy_score(y_validation, y_validation_pred_PI)
+    f1_score_test_PI = f1_score(y_validation, y_validation_pred_PI, average='macro')
 
     print("🟢 Build classifier M")
-    Z_validation_M = encoder_M.predict(X_validation_M)
+    Z_train_M = encoder_M.predict(X_train_M)
 
     clf_M = LogisticRegression(max_iter=1000)
-    clf_M.fit(Z_validation_M, y_validation)
+    clf_M.fit(Z_train_M, y_train)
 
-    print("🟢 Validate classifier M")
-    Z_test_M = encoder_M.predict(X_test_M)
+    print("🟢 Test classifier M")
+    Z_validation_M = encoder_M.predict(X_validation_M)
 
-    y_test_pred_M = clf_M.predict(Z_test_M)
-    acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
-    f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
+    y_validation_pred_M = clf_M.predict(Z_validation_M)
+    acc_score_test_M = accuracy_score(y_validation, y_validation_pred_M)
+    f1_score_test_M = f1_score(y_validation, y_validation_pred_M, average='macro')
 
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
-    y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
+    X_gate_val = np.hstack([Z_train_PI, Z_train_M])
+    y_gate_val = build_gate_router(clf_PI, clf_M, Z_train_PI, Z_train_M, y_train)
 
     print("🟢 Training gate")
     gate = Pipeline([

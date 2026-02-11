@@ -106,7 +106,7 @@ def parse_args(args):
     Returns:
       :obj:`argparse.Namespace`: command line parameters namespace
     """
-    parser = argparse.ArgumentParser(description="Cascading Random Forest Model")
+    parser = argparse.ArgumentParser(description="Individual Random Forest Model")
     parser.add_argument(
         "-stack-all",
         "--stack-all",
@@ -153,6 +153,14 @@ def parse_args(args):
     )    
     return parser.parse_args(args)
 
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
+
 def pretreatment(y_data):
     # Get indices of elements to remove
     indices_to_remove = [i for i, lbl in enumerate(y_data) if lbl in ACTIVITIES_TO_BE_REMOVED]
@@ -184,9 +192,9 @@ def participant_group_split(X_data, y_data, m_data, segment_body, test_size=0.2)
     X_test_M = X_test[:, :91]
     X_test_PI = X_test[:, 91:]
     
-    if segment_body = 'PI'
+    if segment_body == 'PI':
         return X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
-    elif segment_body = 'M'
+    elif segment_body == 'M':
         return X_train_M, X_test_M, y_train, y_test, m_train, m_test
     else:
         raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
@@ -229,7 +237,7 @@ for loop in range(args.loops):
     metric = {}
 
     print("🟢 Split dataset PI+M")
-    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
+    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
     print("🟢 training model")
@@ -279,7 +287,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_" + args.segment_body.lower() + ".csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

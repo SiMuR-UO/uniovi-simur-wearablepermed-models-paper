@@ -13,10 +13,10 @@
             // 0-Dataset generator concatenating PI and M Datasets: 0_dataset_generator.py
 
             // 1-Individual Random Forest classifier model: 2_individual_rf.py
-            "--stack-all", "./datasets/X_y_m_final.npz",
-            "--segment_body", "PI",
-            "--superclases", "Captured24",            
-            "--loops", "30",
+            //"--stack-all", "./datasets/X_y_m_final.npz",
+            //"--segment-body", "M",
+            //"--superclases", "CPA-METS",            
+            //"--loops", "30",
 
             // 2-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

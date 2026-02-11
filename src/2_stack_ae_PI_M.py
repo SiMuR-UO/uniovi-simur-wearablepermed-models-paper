@@ -338,7 +338,7 @@ for loop in range(args.loops):
     clf_PI = LogisticRegression(max_iter=1000)
     clf_PI.fit(Z_train_PI, y_train)
 
-    print("🟢 Validate classifier PI")
+    print("🟢 Test classifier PI")
     Z_validation_PI = encoder_PI.predict(X_validation_PI)
 
     y_validation_pred_PI = clf_PI.predict(Z_validation_PI)
@@ -352,7 +352,7 @@ for loop in range(args.loops):
     clf_M = LogisticRegression(max_iter=1000)
     clf_M.fit(Z_train_M, y_train)
 
-    print("🟢 Validate classifier M")
+    print("🟢 Test classifier M")
     Z_validation_M = encoder_M.predict(X_validation_M)
 
     y_validation_pred_M = clf_M.predict(Z_validation_M)
@@ -381,7 +381,7 @@ for loop in range(args.loops):
 
     meta_model.fit(X_meta_train_all, y_meta_train_all)
 
-    print("🟢 Validate meta model")
+    print("🟢 Test meta model")
     Z_test_PI = encoder_PI.predict(X_test_PI)
     Z_test_M = encoder_M.predict(X_test_M)
 

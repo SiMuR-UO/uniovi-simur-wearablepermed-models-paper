@@ -367,10 +367,7 @@ for loop in range(args.loops):
     acc_score_validation_M = accuracy_score(y_test, y_test_pred_M)
     f1_score_validation_M = f1_score(y_test, y_test_pred_M, average='macro')
 
-    print("🟢 Base predictions on test for PI and M")
-    Z_train_PI = encoder_PI.predict(X_train_PI)
-    Z_train_M = encoder_PI.predict(X_train_M)
-
+    print("🟢 Probability predictions on train for PI and M")
     pr_train_PI = clf_PI.predict_proba(Z_train_PI)
     pr_train_M = clf_PI.predict_proba(Z_train_M)
 
@@ -395,11 +392,11 @@ for loop in range(args.loops):
     y_test_pred_PI = clf_PI.predict_proba(Z_test_PI)
     y_test_pred_M = clf_M.predict_proba(Z_test_M)
 
-    pr_meta_test = meta_model.predict(np.hstack([y_test_pred_PI, y_test_pred_M]))
+    p_meta_test = meta_model.predict(np.hstack([y_test_pred_PI, y_test_pred_M]))
 
     # get meta model metrics
-    meta_model_test_accuracy = accuracy_score(y_test, pr_meta_test)
-    meta_model_test_f1_score = f1_score(y_test, pr_meta_test, average='macro')
+    meta_model_test_accuracy = accuracy_score(y_test, p_meta_test)
+    meta_model_test_f1_score = f1_score(y_test, p_meta_test, average='macro')
 
     # save meta model metrics
     metric["loop"] = loop

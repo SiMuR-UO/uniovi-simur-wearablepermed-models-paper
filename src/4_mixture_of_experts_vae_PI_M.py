@@ -632,12 +632,12 @@ for loop in range(args.loops):
     encoder_M.trainable = False
 
     print("🟢 Build classifier PI")
-    _, _, Z_validation_PI  = extract_latent_stats(encoder_PI, X_validation_PI)
+    _, _, Z_train_PI  = extract_latent_stats(encoder_PI, X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)
-    clf_PI.fit(Z_validation_PI, y_validation)
+    clf_PI.fit(Z_train_PI, y_train)
 
-    print("🟢 Validate classifier PI")
+    print("🟢 Test classifier PI")
     _, _, Z_test_PI  = extract_latent_stats(encoder_PI, X_test_PI)
 
     y_test_pred_PI = clf_PI.predict(Z_test_PI)
@@ -645,12 +645,12 @@ for loop in range(args.loops):
     f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
     print("🟢 Build classifier M")
-    _, _, Z_validation_M  = extract_latent_stats(encoder_M, X_validation_M)
+    _, _, Z_train_M  = extract_latent_stats(encoder_M, X_train_M)
 
     clf_M = LogisticRegression(max_iter=1000)
-    clf_M.fit(Z_validation_M, y_validation)
+    clf_M.fit(Z_train_M, y_train)
 
-    print("🟢 Validate classifier M")
+    print("🟢 Test classifier M")
     _, _, Z_test_M  = extract_latent_stats(encoder_M, X_test_M)
 
     y_test_pred_M = clf_M.predict(Z_test_M)
@@ -658,8 +658,8 @@ for loop in range(args.loops):
     f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
 
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
-    y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
+    X_gate_val = np.hstack([Z_train_PI, Z_train_M])
+    y_gate_val = build_gate_router(clf_PI, clf_M, Z_train_PI, Z_train_M, y_train)
 
     print("🟢 Train Logistic Regression gate") 
     gate = Pipeline([
@@ -674,7 +674,7 @@ for loop in range(args.loops):
 
     gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Validate gate")
+    print("🟢 Test gate")
     _, _, Z_test_PI = encoder_PI.predict(X_test_PI)
     _, _, Z_test_M = encoder_M.predict(X_test_M)
 
@@ -687,7 +687,7 @@ for loop in range(args.loops):
 
     print("Gate accuracy:", gate_acc)
 
-    print("🟢 Soft Validate MoE")
+    print("🟢 Soft Test MoE")
     p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_soft = p_final_soft.argmax(axis=1)
@@ -697,7 +697,7 @@ for loop in range(args.loops):
 
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Validate MoE")
+    print("🟢 Hard Test MoE")
     p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_hard = p_final_hard.argmax(axis=1)

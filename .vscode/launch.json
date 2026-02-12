@@ -39,14 +39,14 @@
             //"--loops", "30",
 
             // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_ae_PI_M.py 
-            "--stack-all", "./datasets/X_y_m_final.npz",
-            "--superclases", "Captured24",
-            "--loops", "30",
-
-            // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_vae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
             //"--loops", "30",
+
+            // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_vae_PI_M.py
+            "--stack-all", "./datasets/X_y_m_final.npz",
+            "--superclases", "Captured24",
+            "--loops", "30",
           ],
           "console": "integratedTerminal"
         }

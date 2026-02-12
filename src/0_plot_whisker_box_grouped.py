@@ -31,36 +31,36 @@ moe_vae_15_data = pd.read_csv('./paper/4_moe_vae/15_classes/metrics.csv', decima
 
 print("🟢 Create f1_score dataframes grouped by classes: 4, 8, 15")
 df_4 = pd.DataFrame({
-    "f1_score_individual_pi": individual_4_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m": individual_4_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
-    "f1_score_concatenated": concatenate_4_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_stacking_rf": stacking_rf_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_moe_rf": moe_rf_4_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_ae": moe_ae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae": moe_vae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "individual_pi": individual_4_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m": individual_4_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "concatenated": concatenate_4_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "stacking_rf": stacking_rf_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "moe_rf": moe_rf_4_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_ae": moe_ae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae": moe_vae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 df_8 = pd.DataFrame({
-    "f1_score_individual_pi": individual_8_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m": individual_8_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
-    "f1_score_concatenated": concatenate_8_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_stacking_rf": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_moe_rf": moe_rf_8_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_ae": moe_ae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae": moe_vae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "individual_pi": individual_8_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m": individual_8_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "concatenated": concatenate_8_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "stacking_rf": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "moe_rf": moe_rf_8_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_ae": moe_ae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae": moe_vae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 df_15 = pd.DataFrame({
-    "f1_score_individual_pi": individual_15_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m": individual_15_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
-    "f1_score_concatenated": concatenate_15_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_stacking_rf": stacking_rf_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_moe_rf": moe_rf_15_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_ae": moe_ae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "individual_pi": individual_15_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m": individual_15_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "concatenated": concatenate_15_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "stacking_rf": stacking_rf_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "moe_rf": moe_rf_15_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_ae": moe_ae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 print("🟢 Create box-and-whisker plot")
@@ -73,10 +73,14 @@ ax_4_boxplot = ax_4.boxplot(
                         notch=True,
                         patch_artist=True
                     )
-ax_4.set_title('Model F1 Score Comparison for 4 Classes')
+ax_4.set_title('Model F1 Score for 4 Classes')
 ax_4.set_ylabel('F1 Score')
 ax_4.grid(axis='y')
 ax_4.tick_params(axis='x', labelrotation=45)
+
+for label in ax_4.get_xticklabels():
+    label.set_horizontalalignment('right')
+    label.set_rotation_mode('anchor')
 
 ax_8_boxplot = ax_8.boxplot(
                     df_8.values,
@@ -86,10 +90,14 @@ ax_8_boxplot = ax_8.boxplot(
                     patch_artist=True
                 )
 
-ax_8.set_title('Model F1 Score Comparison for 8 Classes')
+ax_8.set_title('Model F1 Score for 8 Classes')
 ax_8.set_ylabel('F1 Score')
 ax_8.grid(axis='y')
 ax_8.tick_params(axis='x', labelrotation=45)
+
+for label in ax_8.get_xticklabels():
+    label.set_horizontalalignment('right')
+    label.set_rotation_mode('anchor')
 
 ax_15_boxplot = ax_15.boxplot(
                     df_15.values,
@@ -99,10 +107,14 @@ ax_15_boxplot = ax_15.boxplot(
                     patch_artist=True
                 )
 
-ax_15.set_title('Model F1 Score Comparison for 15 Classes')
+ax_15.set_title('Model F1 Score for 15 Classes')
 ax_15.set_ylabel('F1 Score')
 ax_15.grid(axis='y')
 ax_15.tick_params(axis='x', labelrotation=45)
+
+for label in ax_15.get_xticklabels():
+    label.set_horizontalalignment('right')
+    label.set_rotation_mode('anchor')
 
 # fill with colors
 colors = ['#e9162d', '#f28200', '#ffdb28', '#1fb819', '#00e1da', '#007bd8', '#8f2be7', '#fb4fd9']

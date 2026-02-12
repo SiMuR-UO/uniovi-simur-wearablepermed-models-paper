@@ -553,6 +553,7 @@ for loop in range(args.loops):
     print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
 
     print("🟢 Build classifier PI")
+    # I will use the latent space to train the classifier
     Z_train_PI = encoder_PI.predict(X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)

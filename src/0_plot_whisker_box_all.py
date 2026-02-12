@@ -31,30 +31,30 @@ moe_vae_15_data = pd.read_csv('./paper/4_moe_vae/15_classes/metrics.csv', decima
 
 print("🟢 Create f1_score dataframes")
 df_f1_scores = pd.DataFrame({
-    "f1_score_individual_pi_4": individual_4_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m_4": individual_4_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_pi_8": individual_8_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m_8": individual_8_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_pi_15": individual_15_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_individual_m_15": individual_15_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_concatenated_4": concatenate_4_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_concatenated_8": concatenate_8_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_concatenated_15": concatenate_15_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
-    "f1_score_stacking_rf_4": stacking_rf_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_rf_8": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_rf_15": stacking_rf_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae_4": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae_8": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_stacking_ae_15": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "f1_score_moe_rf_4": moe_rf_4_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_rf_8": moe_rf_8_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_rf_15": moe_rf_15_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
-    "f1_score_moe_ae_4": moe_ae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_ae_8": moe_ae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_ae_15": moe_ae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae_4": moe_vae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae_8": moe_vae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "f1_score_moe_vae_15": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "individual_pi_4": individual_4_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m_4": individual_4_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_pi_8": individual_8_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m_8": individual_8_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_pi_15": individual_15_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "individual_m_15": individual_15_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "concatenated_4": concatenate_4_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "concatenated_8": concatenate_8_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "concatenated_15": concatenate_15_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
+    "stacking_rf_4": stacking_rf_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_rf_8": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_rf_15": stacking_rf_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae_4": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae_8": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_ae_15": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "moe_rf_4": moe_rf_4_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_rf_8": moe_rf_8_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_rf_15": moe_rf_15_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
+    "moe_ae_4": moe_ae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_ae_8": moe_ae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_ae_15": moe_ae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae_4": moe_vae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae_8": moe_vae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
+    "moe_vae_15": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 print("🟢 Save f1_score dataframe metrics")
@@ -71,9 +71,9 @@ ax_boxplot = plt.boxplot(
                 patch_artist=True
             )
 
-plt.title("Model F1 Score Comparison")
+plt.title("Model F1 Score")
 plt.ylabel("F1 Score")
-plt.xticks(rotation=45)
+plt.xticks(rotation=45, ha='right', rotation_mode='anchor')
 plt.grid(axis = 'y')
 plt.tight_layout()
 

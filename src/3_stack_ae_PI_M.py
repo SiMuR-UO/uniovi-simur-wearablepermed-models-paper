@@ -341,18 +341,18 @@ for loop in range(args.loops):
     autoencoder_M.summary()
     
     print("🟢 Build classifier PI")
+    # I will use the latent space to train the classifier
     Z_train_PI = encoder_PI.predict(X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)
     clf_PI.fit(Z_train_PI, y_train)
 
     print("🟢 Test classifier PI")
-    Z_validation_PI = encoder_PI.predict(X_validation_PI)
+    Z_test_PI = encoder_PI.predict(X_test_PI)
 
-    y_validation_pred_PI = clf_PI.predict(Z_validation_PI)
-    
-    acc_score_validation_PI = accuracy_score(y_validation, y_validation_pred_PI)
-    f1_score_validation_PI = f1_score(y_validation, y_validation_pred_PI, average='macro')
+    y_test_pred_PI = clf_PI.predict(Z_test_PI)
+    acc_score_validation_PI = accuracy_score(y_test, y_test_pred_PI)
+    f1_score_validation_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
     print("🟢 Build classifier M")
     Z_train_M = encoder_M.predict(X_train_M)
@@ -361,11 +361,11 @@ for loop in range(args.loops):
     clf_M.fit(Z_train_M, y_train)
 
     print("🟢 Test classifier M")
-    Z_validation_M = encoder_M.predict(X_validation_M)
+    Z_test_M = encoder_M.predict(X_test_M)
 
-    y_validation_pred_M = clf_M.predict(Z_validation_M)
-    acc_score_validation_M = accuracy_score(y_validation, y_validation_pred_M)
-    f1_score_validation_M = f1_score(y_validation, y_validation_pred_M, average='macro')
+    y_test_pred_M = clf_M.predict(Z_test_M)
+    acc_score_validation_M = accuracy_score(y_test, y_test_pred_M)
+    f1_score_validation_M = f1_score(y_test, y_test_pred_M, average='macro')
 
     print("🟢 Base predictions on test for PI and M")
     Z_train_all_PI = encoder_PI.predict(np.vstack([X_train_PI, X_validation_PI]))

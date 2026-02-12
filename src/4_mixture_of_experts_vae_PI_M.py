@@ -632,6 +632,7 @@ for loop in range(args.loops):
     encoder_M.trainable = False
 
     print("🟢 Build classifier PI")
+    # I will use the latent space to train the classifier and the projection z = mu + epsilon * std
     _, _, Z_train_PI  = extract_latent_stats(encoder_PI, X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)

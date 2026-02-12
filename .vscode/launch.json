@@ -14,8 +14,8 @@
 
             // 1-Individual Random Forest classifier model: 2_individual_rf.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--segment-body", "M",
-            //"--superclases", "CPA-METS",            
+            //"--segment-body", "PI",
+            //"--superclases", "Captured24",            
             //"--loops", "30",
 
             // 2-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
@@ -24,9 +24,9 @@
             //"--loops", "30",
 
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
-            //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",            
-            //"--loops", "30",
+            "--stack-all", "./datasets/X_y_m_final.npz",
+            "--superclases", "Captured24",            
+            "--loops", "30",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
@@ -44,9 +44,9 @@
             //"--loops", "30",
 
             // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_vae_PI_M.py
-            "--stack-all", "./datasets/X_y_m_final.npz",
-            "--superclases", "CPA-METS",
-            "--loops", "30",
+            //"--stack-all", "./datasets/X_y_m_final.npz",
+            //"--superclases", "Captured24",
+            //"--loops", "30",
           ],
           "console": "integratedTerminal"
         }

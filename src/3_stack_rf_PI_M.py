@@ -365,36 +365,20 @@ for loop in range(args.loops):
     print("🟢 Base predictions on training for PI and M")
     stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
 
-    print("🟢 Optimize meta model hyperparameters")
-    pipe = Pipeline([
+    print("🟢 Training meta model")
+    model_meta = Pipeline([
         ("scaler", StandardScaler()),
-        ("clf", LogisticRegression(max_iter=2000))
+        ("clf", LogisticRegression(
+            penalty="l2",
+            solver="lbfgs",
+            max_iter=1000
+        ))
     ])
 
-    param_grid = {
-        "clf__C": [0.001, 0.01, 0.1, 1, 10],
-        "clf__penalty": ["l2"],
-        "clf__solver": ["lbfgs"]
-    }
-
-    cv = GroupKFold(n_splits=5)
-
-    grid = GridSearchCV(
-        pipe,
-        param_grid=param_grid,
-        cv=cv,
-        scoring="accuracy",
-        n_jobs=-1
-    ) 
-
     print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
-    grid.fit(stack_X_tr, p_y_tr, groups=p_m_tr)
-    model_meta = grid.best_estimator_
+    model_meta.fit(stack_X_tr, p_y_tr)
 
-    print("Best params:", grid.best_params_)
-    print("Best CV accuracy:", grid.best_score_)
-
-    # print("🟢 Train meta model (RF with fix hyperparameters) with concatenated probability distribution from PI and M")
+    # print("🟢 Train meta model (Random Forest with fix hyperparameters) with concatenated probability distribution from PI and M")
     # model_meta = RandomForestClassifier(        
     #     n_estimators=N_ESTIMATORS,                     
     #     max_depth=MAX_DEPTH,

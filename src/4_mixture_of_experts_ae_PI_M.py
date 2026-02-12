@@ -559,11 +559,11 @@ for loop in range(args.loops):
     clf_PI.fit(Z_train_PI, y_train)
 
     print("🟢 Test classifier PI")
-    Z_validation_PI = encoder_PI.predict(X_validation_PI)
+    Z_test_PI = encoder_PI.predict(X_test_PI)
 
-    y_validation_pred_PI = clf_PI.predict(Z_validation_PI)
-    acc_score_test_PI = accuracy_score(y_validation, y_validation_pred_PI)
-    f1_score_test_PI = f1_score(y_validation, y_validation_pred_PI, average='macro')
+    y_test_pred_PI = clf_PI.predict(Z_test_PI)
+    acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
+    f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
     print("🟢 Build classifier M")
     Z_train_M = encoder_M.predict(X_train_M)
@@ -572,11 +572,11 @@ for loop in range(args.loops):
     clf_M.fit(Z_train_M, y_train)
 
     print("🟢 Test classifier M")
-    Z_validation_M = encoder_M.predict(X_validation_M)
+    Z_test_M = encoder_M.predict(X_test_M)
 
-    y_validation_pred_M = clf_M.predict(Z_validation_M)
-    acc_score_test_M = accuracy_score(y_validation, y_validation_pred_M)
-    f1_score_test_M = f1_score(y_validation, y_validation_pred_M, average='macro')
+    y_test_pred_M = clf_M.predict(Z_test_M)
+    acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
+    f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
 
     print("🟢 Build gate validation datasets")
     X_gate_val = np.hstack([Z_train_PI, Z_train_M])
@@ -594,7 +594,7 @@ for loop in range(args.loops):
 
     gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Validate gate")
+    print("🟢 Test gate")
     Z_test_PI = encoder_PI.predict(X_test_PI)
     Z_test_M = encoder_M.predict(X_test_M)
 
@@ -607,7 +607,7 @@ for loop in range(args.loops):
 
     print("Gate accuracy:", gate_acc)
 
-    print("🟢 Soft Validate MoE")
+    print("🟢 Soft Test MoE")
     p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_soft = p_final_soft.argmax(axis=1)
@@ -617,7 +617,7 @@ for loop in range(args.loops):
 
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Validate MoE")
+    print("🟢 Hard Test MoE")
     p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_hard = p_final_hard.argmax(axis=1)

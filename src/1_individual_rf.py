@@ -254,14 +254,14 @@ for loop in range(args.loops):
     model.fit(X_train, y_train)
 
     print("🟢 Validate model")
-    model_test_accuracy = accuracy_score(y_test, model.predict(X_test))
-    model_test_f1_score = f1_score(y_test, model.predict(X_test), average='macro')
+    model_accuracy_test = accuracy_score(y_test, model.predict(X_test))
+    model_f1_score_test = f1_score(y_test, model.predict(X_test), average='macro')
 
     # save meta model metrics
     metric["loop"] = loop
 
-    metric["model_accuracy_test"] = model_test_accuracy
-    metric["model_f1_score_test"] = model_test_f1_score
+    metric["model_accuracy_test"] = model_accuracy_test
+    metric["model_f1_score_test"] = model_f1_score_test
 
     # add metrics to collection
     metrics.append(metric)

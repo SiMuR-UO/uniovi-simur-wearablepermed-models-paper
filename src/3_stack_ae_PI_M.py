@@ -368,14 +368,13 @@ for loop in range(args.loops):
     f1_score_validation_M = f1_score(y_test, y_test_pred_M, average='macro')
 
     print("🟢 Base predictions on test for PI and M")
-    Z_train_all_PI = encoder_PI.predict(np.vstack([X_train_PI, X_validation_PI]))
-    Z_train_all_M = encoder_PI.predict(np.vstack([X_train_M, X_validation_M]))
+    Z_train_PI = encoder_PI.predict(X_train_PI)
+    Z_train_M = encoder_PI.predict(X_train_M)
 
-    pr_train_all_PI = clf_PI.predict_proba(Z_train_all_PI)
-    pr_train_all_M = clf_PI.predict_proba(Z_train_all_M)
+    pr_train_PI = clf_PI.predict_proba(Z_train_PI)
+    pr_train_M = clf_PI.predict_proba(Z_train_M)
 
-    X_meta_train_all = np.hstack([pr_train_all_PI, pr_train_all_M])
-    y_meta_train_all = np.hstack([y_train, y_validation])
+    X_meta_train_all = np.hstack([pr_train_PI, pr_train_M])
 
     print("🟢 Training meta model")
     meta_model = Pipeline([
@@ -387,7 +386,7 @@ for loop in range(args.loops):
         ))
     ])
 
-    meta_model.fit(X_meta_train_all, y_meta_train_all)
+    meta_model.fit(X_meta_train_all, y_train)
 
     print("🟢 Test meta model")
     Z_test_PI = encoder_PI.predict(X_test_PI)

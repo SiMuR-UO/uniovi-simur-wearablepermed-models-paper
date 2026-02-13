@@ -389,7 +389,7 @@ for loop in range(args.loops):
 
     print("🟢 Probability predictions on train for PI and M")
     pr_train_PI = clf_PI.predict_proba(Z_train_PI)
-    pr_train_M = clf_PI.predict_proba(Z_train_M)
+    pr_train_M = clf_M.predict_proba(Z_train_M)
 
     X_meta_train_all = np.hstack([pr_train_PI, pr_train_M])
 

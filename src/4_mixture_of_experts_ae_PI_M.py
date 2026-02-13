@@ -303,13 +303,12 @@ def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
 
     return gate_y
 
-def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, Z_test_PI, Z_test_M):
+def mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
     # Expert probabilities prediction (N,8)
-    p_test_PI = expert_PI.predict_proba(Z_test_PI)
-    p_test_M = expert_M.predict_proba(Z_test_M)
+    p_test_PI = clf_PI.predict_proba(Z_test_PI)
+    p_test_M = clf_M.predict_proba(Z_test_M)
 
     # Gate probabilities prediction (N,2)
-    #w = gate.predict_proba(np.hstack([Z_test_PI, Z_test_M]))
     w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
 
     # Extract expert weights (N, 1)
@@ -319,13 +318,12 @@ def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, Z_test_PI, 
     # Weighted mixture
     return w_PI * p_test_PI + w_M * p_test_M
 
-def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, Z_test_PI, Z_test_M):
+def mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
     # Expert probabilities prediction (N, 8)
-    p_test_PI = expert_PI.predict_proba(Z_test_PI)
-    p_test_M = expert_M.predict_proba(Z_test_M)
+    p_test_PI = clf_PI.predict_proba(Z_test_PI)
+    p_test_M = clf_M.predict_proba(Z_test_M)
 
     # Gate probabilities prediction (N, 2)
-    #w = gate.predict_proba(np.hstack([Z_test_PI, Z_test_M]))
     w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
 
     # Choose expert per sample (top-1)
@@ -585,7 +583,6 @@ for loop in range(args.loops):
     X_train_pred_PI = clf_PI.predict_proba(Z_train_PI)
     X_train_pred_M = clf_M.predict_proba(Z_train_M)
 
-    #X_gate_val = np.hstack([Z_train_PI, Z_train_M])
     X_gate_val = np.hstack([X_train_pred_PI, X_train_pred_M])
     y_gate_val = build_gate_router(clf_PI, clf_M, Z_train_PI, Z_train_M, y_train)
 
@@ -605,7 +602,6 @@ for loop in range(args.loops):
     X_test_pred_PI = clf_PI.predict_proba(Z_test_PI)
     X_test_pred_M = clf_M.predict_proba(Z_test_M)
     
-    #X_gate_test = np.hstack([Z_test_PI, Z_test_M])
     X_gate_test = np.hstack([X_test_pred_PI, X_test_pred_M])
     y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
 

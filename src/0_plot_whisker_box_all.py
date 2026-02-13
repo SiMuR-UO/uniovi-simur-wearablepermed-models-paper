@@ -66,7 +66,7 @@ plt.figure(figsize=(8, 5))
 ax_boxplot = plt.boxplot(
                 df_f1_scores.values,
                 labels=df_f1_scores.columns,
-                showmeans=True,
+                meanline=True,
                 notch=True,
                 patch_artist=True
             )

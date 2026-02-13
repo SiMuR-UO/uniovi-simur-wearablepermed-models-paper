@@ -340,6 +340,26 @@ for loop in range(args.loops):
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
     autoencoder_M.summary()
     
+    print("🟢 Compute reconstruction MSE for PI")
+    X_train_pred_PI = autoencoder_PI.predict(X_train_PI)
+    X_test_pred_PI  = autoencoder_PI.predict(X_test_PI)
+
+    mse_train_PI = np.mean(np.square(X_train_PI - X_train_pred_PI), axis=1)
+    mse_test_PI  = np.mean(np.square(X_test_PI - X_test_pred_PI),  axis=1)
+
+    print("Mean reconstruction MSE for train PI:", np.mean(mse_train_PI))
+    print("Mean reconstruction MSE for test PI:", np.mean(mse_test_PI))
+
+    print("🟢 Compute reconstruction MSE for M")
+    X_train_pred_M = autoencoder_M.predict(X_train_M)
+    X_test_pred_M  = autoencoder_M.predict(X_test_M)
+
+    mse_train_M = np.mean(np.square(X_train_M - X_train_pred_M), axis=1)
+    mse_test_M  = np.mean(np.square(X_test_M - X_test_pred_M),  axis=1)
+
+    print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
+    print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
+
     print("🟢 Build classifier PI")
     # I will use the latent space to train the classifier
     Z_train_PI = encoder_PI.predict(X_train_PI)

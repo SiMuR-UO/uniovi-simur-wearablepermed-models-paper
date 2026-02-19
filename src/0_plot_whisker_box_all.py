@@ -57,8 +57,11 @@ df_f1_scores = pd.DataFrame({
     "moe_vae_15": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
-print("🟢 Save f1_score dataframe metrics")
+print("🟢 Save f1_score dataframe metrics and mean ± std")
 df_f1_scores.to_csv(str(Path.cwd()) + "/results/metrics_f1_scores.csv", index=False)   
+
+df_metrics = df_f1_scores.describe().loc[['mean', 'std']]
+df_metrics.to_csv(str(Path.cwd()) + "/results/metrics_mean_f1_scores.csv", index=False)   
 
 print("🟢 Create box-and-whisker plot")
 plt.figure(figsize=(8, 5))

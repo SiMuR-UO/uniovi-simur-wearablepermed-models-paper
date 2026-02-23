@@ -1,4 +1,5 @@
 import sys
+import time
 import argparse
 import logging
 import numpy as np
@@ -7,7 +8,7 @@ from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GroupKFold, cross_validate
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -96,7 +97,8 @@ MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve th
 MAX_FEATURES=0.2
 MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-N_JOBS=-1
+
+metrics = []
 
 def parse_args(args):
     """Parse command line parameters
@@ -121,15 +123,7 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",        
-        help=f"Use Superclases: Captured24, CPA-METS"
-    )    
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",
-        dest="k_folds",        
-        type=int,
-        default=3,       
-        help=f"k-Folds for train."
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
     )
     parser.add_argument(
         "-loops",
@@ -158,6 +152,14 @@ def parse_args(args):
     
     return parser.parse_args(args)
 
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
+
 def pretreatment(y_data):
     # Get indices of elements to remove
     indices_to_remove = [i for i, lbl in enumerate(y_data) if lbl in ACTIVITIES_TO_BE_REMOVED]
@@ -174,142 +176,38 @@ def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2)
     # Transporm string labels to numbers
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
+     
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    # Unique participants
-    unique_groups = np.unique(m_data)
+    train_validation_idx, test_idx = next(gss_test.split(X_data, y_data, groups=m_data))
 
-    n_total = len(unique_groups)
-    n_val = int(n_total * val_size)    
-    n_test = int(n_total * test_size)
+    X_train_validation, X_test = X_data[train_validation_idx], X_data[test_idx]
+    y_train_validation, y_test = y_data[train_validation_idx], y_data[test_idx]
+    m_train_validation, m_test = m_data[train_validation_idx], m_data[test_idx]
 
-    test_groups = unique_groups[:n_test]
-    val_groups = unique_groups[n_test:n_test + n_val]
-    train_groups = unique_groups[n_test + n_val:]
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=(val_size / (1 - test_size)))
 
-    # Index selection
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    val_idx   = np.where(np.isin(m_data, val_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]
+    train_idx, val_idx = next(gss_val.split(X_train_validation, y_train_validation, groups=m_train_validation))
 
-    # Split datasets
-    X_train, X_val, X_test = X_data[train_idx], X_data[val_idx], X_data[test_idx]
-    y_train, y_val, y_test = y_data[train_idx], y_data[val_idx], y_data[test_idx]
-    m_train, m_val, m_test = m_data[train_idx], m_data[val_idx], m_data[test_idx]
+    X_train, X_val = X_train_validation[train_idx], X_train_validation[val_idx]
+    y_train, y_val = y_train_validation[train_idx], y_train_validation[val_idx]
+    m_train, m_val = m_train_validation[train_idx], m_train_validation[val_idx]
 
-    print(f"Participants → Train: {len(np.unique(m_train))}")
-    print(f"Participants → Val:   {len(np.unique(m_val))}")
-    print(f"Participants → Test:  {len(np.unique(m_test))}")
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in validation:  {np.unique(m_val)}")
+    print(f"Unique participants in test:  {np.unique(m_test)}")
 
     # Split training/validation/test for M(91), PI(91)
     X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-    X_val_M,   X_val_PI   = X_val[:, :91],   X_val[:, 91:]
-    X_test_M,  X_test_PI  = X_test[:, :91],  X_test[:, 91:]
-
+    X_val_M, X_val_PI = X_val[:, :91], X_val[:, 91:]
+    X_test_M, X_test_PI = X_test[:, :91], X_test[:, 91:]
+    
     return (
         X_train_PI, X_val_PI, X_test_PI,
         X_train_M,  X_val_M,  X_test_M,
         y_train, y_val, y_test,
         m_train, m_val, m_test
-    )
-
-def base_kfold_cross_validation(X_train, y_train, m_train, k):
-    gkf = GroupKFold(n_splits=k)
-
-    X_base_train = []
-    y_base_train = []
-
-    fold_acc_training_scores = [] 
-    fold_f1_training_scores = [] 
-    fold_acc_val_scores = []    
-    fold_f1_val_scores = []    
-
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_train, y_train, groups=m_train), start=1):
-        # Split into training and validation folds (group-aware)
-        X_training_fold, X_validation_fold = X_train[train_idx], X_train[val_idx]
-        y_training_fold, y_validation_fold = y_train[train_idx], y_train[val_idx]
-
-        # Create k-fold model
-        fold_model = RandomForestClassifier(
-            n_jobs=N_JOBS,        
-            n_estimators=N_ESTIMATORS,                     
-            max_depth=MAX_DEPTH,
-            max_features= MAX_FEATURES,                 
-            min_samples_split=MIN_SAMPLES_SPLIT,        
-            min_samples_leaf=MIN_SAMPLES_LEAF   
-        )
-
-        # Train k-fold model with k-fold datasets
-        fold_model.fit(X_training_fold, y_training_fold)
-
-        for idx, importance in enumerate(fold_model.feature_importances_):
-            print(f"Feature {idx}", importance)            
-
-        # Calculate training k-fold metrics
-        y_training_fold_pred = fold_model.predict(X_training_fold)
-        acc_score_training = accuracy_score(y_training_fold, y_training_fold_pred)
-        f1_score_training = f1_score(y_training_fold, y_training_fold_pred, average='macro') 
-
-        fold_acc_training_scores.append(acc_score_training)
-        fold_f1_training_scores.append(f1_score_training)
-
-        print(f"🟡 Fold {fold}/{k}: Training Accuracy Score: {acc_score_training:.4f}, Training F1-score: {f1_score_training:.4f}")
-
-        # Calculate validation k-fold metrics
-        y_validation_fold_pred = fold_model.predict(X_validation_fold)
-        acc_score_val = accuracy_score(y_validation_fold, y_validation_fold_pred)
-        f1_score_val = f1_score(y_validation_fold, y_validation_fold_pred, average='macro') 
-
-        fold_acc_val_scores.append(acc_score_val)
-        fold_f1_val_scores.append(f1_score_val)
-
-        print(f"🟡 Fold {fold}/{k}: Validation Accuracy Score: {acc_score_val:.4f}, Validation F1-score: {f1_score_val:.4f}")
-        
-    # create base model mean and standard deviation metrics
-    metrics = {
-        "base_model_accuracy_train_mean": float(np.mean(fold_acc_training_scores)),
-        "base_model_f1_train_mean": float(np.mean(fold_f1_training_scores)),
-        "base_model_accuracy_validate_mean": float(np.mean(fold_acc_val_scores)),
-        "base_model_f1_validate_mean": float(np.mean(fold_f1_val_scores)),
-    }
-    
-    # Create base model
-    expert_model = RandomForestClassifier(
-        n_jobs=N_JOBS,        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH, 
-        max_features= MAX_FEATURES,                
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF              
-    )
-
-    # # Other way to obtain grouped cross validation
-    # scores = cross_validate(
-    #     expert_model,
-    #     X_train,
-    #     y_train,
-    #     cv=gkf,
-    #     groups=m_train,
-    #     scoring={
-    #         "accuracy": "accuracy",
-    #         "f1_macro": "f1_macro"
-    #     }
-    # )
-
-    # print("Accuracy per fold:", scores["test_accuracy"])
-    # print("F1-macro per fold:", scores["test_f1_macro"])
-
-    # print("Mean accuracy:", scores["test_accuracy"].mean())
-    # print("Mean F1-macro:", scores["test_f1_macro"].mean())
-
-    # # Create base model
-    # metrics = {
-    #     "base_model_accuracy_validate_mean": float(scores["test_accuracy"].mean()),
-    #     "base_model_f1_validate_mean": float(scores["test_f1_macro"].mean()),
-    # }
-
-    expert_model.fit(X_train, y_train)
-
-    return expert_model, metrics     
+    )  
 
 def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
     p_PI_val = expert_PI.predict_proba(X_PI)
@@ -370,6 +268,8 @@ def mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M):
 
     return p_final
 
+start_app = time.perf_counter()
+
 args = parse_args(sys.argv[1:])
 
 print("🟢 load stack PI+M")
@@ -397,7 +297,6 @@ elif (args.superclases == "CPA-METS"):
     (y_data) = superclases_cpa_mets(y_data)
 
 participant_ids = np.sort(np.unique(m_data))
-
 print("Total participants:", len(participant_ids))
 
 print("🟢 Normalize PI and M Datasets") 
@@ -405,77 +304,70 @@ sc = StandardScaler()
 
 X_data = sc.fit_transform(X_data)
 
-print("🟢 Split Dataset (Training/Validation/Test)")
-(X_train_PI, X_validation_PI, X_test_PI,
- X_train_M, X_validation_M, X_test_M,
- y_train, y_validation, y_test,
- m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
-
-loops = []
-
-# sensor metrics
-base_model_train_accuracies_PI = []
-base_model_train_f1_scores_PI = []
-base_model_validate_accuracies_PI = []
-base_model_validate_f1_scores_PI = []
-base_model_train_accuracies_M = []
-base_model_train_f1_scores_M = []
-base_model_validate_accuracies_M = []
-base_model_validate_f1_scores_M = []
-
-# gate metrics
-gate_accs = []
-gate_f1_weights = []
-
-# moe metrics
-moe_acc_softs = []
-moe_f1_weight_softs = []
-moe_acc_hards = []
-moe_f1_weight_hards = []
-
 for loop in range(args.loops):
+    start_loop = time.perf_counter()
+
     print("🔵 Loop: " + str(loop))
-    loops.append(loop)
 
-    print("🟢 k-Fold validation and train expert model PI")
-    expert_PI, metric_PI = base_kfold_cross_validation(X_train_PI, y_train, m_train, args.k_folds)
-    print("\n")
+    metric = {}
 
-    # append PI metrics
-    base_model_train_accuracies_PI.append(
-        metric_PI["base_model_accuracy_train_mean"]
-    )
-    base_model_train_f1_scores_PI.append(
-        metric_PI["base_model_f1_train_mean"]
-    )
-    base_model_validate_accuracies_PI.append(
-        metric_PI["base_model_accuracy_validate_mean"]
-    )
-    base_model_validate_f1_scores_PI.append(
-        metric_PI["base_model_f1_validate_mean"]
+    print("🟢 Split Dataset (Training/Validation/Test)")
+    (X_train_PI, X_validation_PI, X_test_PI,
+    X_train_M, X_validation_M, X_test_M,
+    y_train, y_validation, y_test,
+    m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
+
+    print("🟢 Train expert model PI")
+    expert_PI = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH, 
+        max_features= MAX_FEATURES,                
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1            
     )
 
-    print("🟢 k-Fold validation and train expert model M")
-    expert_M, metric_M =  base_kfold_cross_validation(X_train_M, y_train, m_train, args.k_folds)
-    print("\n")
+    expert_PI.fit(X_train_PI, y_train)
 
-    # append M metrics
-    base_model_train_accuracies_M.append(
-        metric_M["base_model_accuracy_train_mean"]
+    print("🟢 Test expert model PI")
+    y_validation_pred_PI = expert_PI.predict(X_validation_PI)
+
+    acc_score_val_PI = accuracy_score(y_validation, y_validation_pred_PI)
+    f1_score_val_PI = f1_score(y_validation, y_validation_pred_PI, average='macro') 
+
+    print("🟢 Train expert model M")
+    expert_M = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH, 
+        max_features= MAX_FEATURES,                
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1        
     )
-    base_model_train_f1_scores_M.append(
-        metric_M["base_model_f1_train_mean"]
-    )
-    base_model_validate_accuracies_M.append(
-        metric_M["base_model_accuracy_validate_mean"]
-    )
-    base_model_validate_f1_scores_M.append(
-        metric_M["base_model_f1_validate_mean"]
-    )
+
+    expert_M.fit(X_train_M, y_train)
+
+    print("🟢 Test expert model PI")
+    y_validation_pred_M = expert_M.predict(X_validation_M)
+
+    acc_score_val_M = accuracy_score(y_validation, y_validation_pred_M)
+    f1_score_val_M = f1_score(y_validation, y_validation_pred_M, average='macro') 
 
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([X_validation_PI, X_validation_M])
-    y_gate_val = build_gate_router(expert_PI, expert_M, X_validation_PI, X_validation_M, y_validation)
+    X_gate_val = np.hstack([
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M])
+    ])
+    
+    y_gate_val = build_gate_router(
+        expert_PI, 
+        expert_M, 
+        np.vstack([X_train_PI, X_validation_PI]), 
+        np.vstack([X_train_M, X_validation_M]),
+        np.concatenate([y_train, y_validation])
+    )
 
     print("🟢 Training gate")
     gate = Pipeline([
@@ -489,7 +381,7 @@ for loop in range(args.loops):
 
     gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Validate gate")
+    print("🟢 Test gate")
     X_gate_test = np.hstack([X_test_PI, X_test_M])
     y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
 
@@ -499,10 +391,7 @@ for loop in range(args.loops):
     gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
     print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
 
-    gate_accs.append(gate_acc)
-    gate_f1_weights.append(gate_f1_weight)
-
-    print("🟢 Soft Validate MoE")
+    print("🟢 Soft Test MoE")
     p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
 
     y_pred_soft = p_final_soft.argmax(axis=1)
@@ -511,7 +400,7 @@ for loop in range(args.loops):
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Validate MoE")
+    print("🟢 Hard Test MoE")
     p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
 
     y_pred_hard = p_final_hard.argmax(axis=1)
@@ -520,31 +409,27 @@ for loop in range(args.loops):
     moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
     print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
 
-    moe_acc_softs.append(moe_acc_soft)
-    moe_f1_weight_softs.append(moe_f1_weight_soft)
-    moe_acc_hards.append(moe_acc_hard)
-    moe_f1_weight_hards.append(moe_f1_weight_hard)
+    print("🟢 Add metrics")
+    metric["loop"] = loop
 
+    metric["base_model_validate_accuracy_PI"] = acc_score_val_PI
+    metric["base_model_validate_f1_score_PI"] = f1_score_val_PI
+    metric["base_model_validate_accuracy_M"] = acc_score_val_M
+    metric["base_model_train_f1_score_M"] = f1_score_val_M    
+    metric["gate_acc"] = gate_acc
+    metric["gate_f1_weight"] = gate_f1_weight
+    metric["moe_acc_soft"] = moe_acc_soft
+    metric["moe_f1_weight_soft"] = moe_f1_weight_soft
+    metric["moe_acc_hard"] = moe_acc_hard
+    metric["moe_f1_weight_hard"] = moe_f1_weight_hard
 
-print("🟢 Save metrics")
-# Create dataframe with metric collections
-df_metrics = pd.DataFrame({   
-    'loop': loops,
-    'base_model_train_accuracy_PI': base_model_train_accuracies_PI,
-    'base_model_train_f1_score_PI': base_model_train_f1_scores_PI,
-    'base_model_validate_accuracy_PI': base_model_validate_accuracies_PI,
-    'base_model_validate_f1_score_PI': base_model_validate_f1_scores_PI,
-    'base_model_train_accuracy_M': base_model_train_accuracies_M,
-    'base_model_train_f1_score_M': base_model_train_f1_scores_M,
-    'base_model_validate_accuracy_M': base_model_validate_accuracies_M,
-    'base_model_validate_f1_score_M': base_model_validate_f1_scores_M,
-    'gate_acc': gate_accs,
-    'bgate_f1_weight': gate_f1_weights,
-    'moe_acc_soft': moe_acc_softs,
-    'moe_f1_weight_soft': moe_f1_weight_softs,
-    'moe_acc_hard': moe_acc_hards,
-    'moe_f1_weight_hard': moe_f1_weight_hards
-})
+    metrics.append(metric)
+
+    elapsed_loop = time.perf_counter() - start_loop
+    print(f"Loop time: {elapsed_loop:.2f} seconds")
+
+print("🟢 Calculate metrics mean and standard deviations")
+df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
 mean_row = df_metrics.mean(numeric_only=True)
@@ -560,4 +445,8 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
-df_metrics.to_csv(str(Path.cwd()) + "/results/moe_rf_metrics.csv", index=False)    
+print("🟢 Save metrics")
+df_metrics.to_csv(str(Path.cwd()) + "/paper/4_moe_rf/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
+
+elapsed_app = time.perf_counter() - start_app
+print(f"Application time: {elapsed_app:.2f} seconds")

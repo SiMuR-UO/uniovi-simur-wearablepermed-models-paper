@@ -1,4 +1,5 @@
 import sys
+import time
 import argparse
 import logging
 import numpy as np
@@ -9,15 +10,16 @@ import matplotlib.pyplot as plt
 import optuna
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score,f1_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
-from tensorflow.keras import layers, models, regularizers
+import tensorflow as tf
+from keras import Model, Input
+from tensorflow.keras import layers
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.backend import clear_session
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.backend import clear_session, shape
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
                      'INCREMENTAL CICLOERGOMETRO', 'YOGA', 'SENTADO VIENDO LA TV',
@@ -68,7 +70,7 @@ MAPPING_CAPTURED24 = {
 
 SUPERCLASES_CPA_METS = ['SEDENTARY', 'LIGHT-INTENSITY',
                         'MODERATE-INTENSITY', 'VIGOROUS-INTENSITY']
-
+                        
 MAPPING_CPA_METS = {
     # SEDENTARY
     'FASE REPOSO CON K5': 'SEDENTARY',
@@ -98,6 +100,54 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
+metrics = []
+
+class VAE(Model):
+    def __init__(self, encoder, decoder, beta):
+        super().__init__()
+
+        self.encoder = encoder
+        self.decoder = decoder
+        self.beta = beta
+
+    def call(self, inputs, training=False):
+        z_mean, z_log_var, z = self.encoder(inputs)
+
+        return self.decoder(z)
+
+    def compute_loss(self, x):
+        x = tf.cast(x, tf.float32)
+
+        z_mean, z_log_var, z = self.encoder(x)
+        x_hat = self.decoder(z)
+
+        recon = tf.reduce_mean(
+            tf.reduce_sum(tf.square(x - x_hat), axis=1)
+        )
+
+        kl = -0.5 * tf.reduce_mean(
+            tf.reduce_sum(
+                1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var),
+                axis=1
+            )
+        )
+
+        return recon + self.beta * kl, recon, kl
+
+    def train_step(self, x):
+        with tf.GradientTape() as tape:
+            total, recon, kl = self.compute_loss(x)
+
+        grads = tape.gradient(total, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+        return {"loss": total, "recon": recon, "kl": kl}
+
+    def test_step(self, x):
+        total, recon, kl = self.compute_loss(x)
+
+        return {"loss": total, "recon": recon, "kl": kl}
+
 def parse_args(args):
     """Parse command line parameters
 
@@ -108,7 +158,7 @@ def parse_args(args):
     Returns:
       :obj:`argparse.Namespace`: command line parameters namespace
     """
-    parser = argparse.ArgumentParser(description="Mixture of Experts with autoencoders experts")
+    parser = argparse.ArgumentParser(description="Mixture of Experts with variational autoencoders experts")
 
     parser.add_argument(
         "-stack-all",
@@ -121,7 +171,7 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",        
-        help=f"Use Superclases: Captured24, CPA-METS"
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
     )
     parser.add_argument(
         "-loops",
@@ -130,7 +180,7 @@ def parse_args(args):
         type=int,        
         default=30,        
         help="Number of loops."
-    )     
+    )        
     parser.add_argument(
         "-optimize-trials",
         "--optimize-trials",               
@@ -146,14 +196,14 @@ def parse_args(args):
         action='store_true',
         default=False,
         help="Generate Plots"
-    )                   
+    )                
     parser.add_argument(
         "-v",
         "--verbose",
         dest="loglevel",
         action="store_const",
         const=logging.INFO,
-        help="set log level to verbose."
+        help="set log level to verbose."        
     )
     parser.add_argument(
         "-vv",
@@ -163,9 +213,17 @@ def parse_args(args):
         const=logging.DEBUG,
         help="set log level to very verbose."        
     )
-
-    return parser.parse_args(args)
     
+    return parser.parse_args(args)
+
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
+
 def pretreatment(y_data):
     # Get indices of elements to remove
     indices_to_remove = [i for i, lbl in enumerate(y_data) if lbl in ACTIVITIES_TO_BE_REMOVED]
@@ -178,42 +236,37 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1):
+def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
     # Transporm string labels to numbers
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
     class_names = le.classes_
 
-    # Unique participants
-    unique_groups = np.unique(m_data)
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    n_total = len(unique_groups)
-    n_test = int(n_total * test_size)
-    n_val = int(n_total * val_size)
+    train_validation_idx, test_idx = next(gss_test.split(X_data, y_data, groups=m_data))
 
-    test_groups = unique_groups[:n_test]
-    val_groups = unique_groups[n_test:n_test + n_val]
-    train_groups = unique_groups[n_test + n_val:]
+    X_train_validation, X_test = X_data[train_validation_idx], X_data[test_idx]
+    y_train_validation, y_test = y_data[train_validation_idx], y_data[test_idx]
+    m_train_validation, m_test = m_data[train_validation_idx], m_data[test_idx]
 
-    # Index selection
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    val_idx   = np.where(np.isin(m_data, val_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=(val_size / (1 - test_size)))
 
-    # Split datasets
-    X_train, X_val, X_test = X_data[train_idx], X_data[val_idx], X_data[test_idx]
-    y_train, y_val, y_test = y_data[train_idx], y_data[val_idx], y_data[test_idx]
-    m_train, m_val, m_test = m_data[train_idx], m_data[val_idx], m_data[test_idx]
+    train_idx, val_idx = next(gss_val.split(X_train_validation, y_train_validation, groups=m_train_validation))
 
-    print(f"Participants → Train: {len(np.unique(m_train))}")
-    print(f"Participants → Val:   {len(np.unique(m_val))}")
-    print(f"Participants → Test:  {len(np.unique(m_test))}")
+    X_train, X_val = X_train_validation[train_idx], X_train_validation[val_idx]
+    y_train, y_val = y_train_validation[train_idx], y_train_validation[val_idx]
+    m_train, m_val = m_train_validation[train_idx], m_train_validation[val_idx]
+
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in validation:  {np.unique(m_val)}")
+    print(f"Unique participants in test:  {np.unique(m_test)}")
 
     # Split training/validation/test for M(91), PI(91)
     X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-    X_val_M,   X_val_PI   = X_val[:, :91],   X_val[:, 91:]
-    X_test_M,  X_test_PI  = X_test[:, :91],  X_test[:, 91:]
-
+    X_val_M, X_val_PI = X_val[:, :91], X_val[:, 91:]
+    X_test_M, X_test_PI = X_test[:, :91], X_test[:, 91:]
+    
     return (
         X_train_PI, X_val_PI, X_test_PI,
         X_train_M,  X_val_M,  X_test_M,
@@ -222,48 +275,76 @@ def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.1)
         class_names
     )
 
-def build_autoencoder(input_dim, latent_dim, dropout=0.0, l2_reg=0.0):
-    # Encoder
-    input_layer = layers.Input(shape=(input_dim,), name="input")    
-    encoded = layers.Dense(128, activation="relu", kernel_regularizer=regularizers.l2(l2_reg), name="enc_dense_128")(input_layer)
-    encoded = layers.Dropout(dropout)(encoded)
-    encoded = layers.Dense(64, activation="relu", kernel_regularizer=regularizers.l2(l2_reg), name="enc_dense_64")(encoded)
+def build_encoder(input_dim, latent_dim, hidden_dim, name):
+    inputs = Input(shape=(input_dim,))
+    x = layers.Dense(hidden_dim, activation="relu")(inputs)
 
-    latent = layers.Dense(latent_dim, activation="linear", kernel_regularizer=regularizers.l2(l2_reg), name="latent")(encoded)
+    z_mean = layers.Dense(latent_dim)(x)
+    z_log_var = layers.Dense(latent_dim)(x)
 
-    # Decoder
-    decoded = layers.Dense(64, activation="relu", name="dec_dense_64")(latent)
-    decoded = layers.Dense(128, activation="relu", name="dec_dense_128")(decoded)
-    output_layer = layers.Dense(input_dim, activation="linear", name="output")(decoded)
+    def sampling(args):
+        mu, logvar = args
+        eps = tf.random.normal(shape=shape(mu))
 
-    autoencoder = models.Model(input_layer, output_layer)
-    encoder = models.Model(input_layer, latent)
+        return mu + tf.exp(0.5 * logvar) * eps
 
-    return autoencoder, encoder
+    z = layers.Lambda(sampling, output_shape=(latent_dim,), name=f"{name}_z")([z_mean, z_log_var])
 
-def objective(trial, X_train, X_validation):
-    latent_dim = trial.suggest_int("latent_dim", 4, 64)
-    dropout = trial.suggest_float("dropout", 0.0, 0.5)
-    l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    
-    autoencoder, encoder = build_autoencoder(X_train.shape[1], latent_dim, dropout, l2_reg)
+    return Model(inputs, [z_mean, z_log_var, z], name=name)
 
-    autoencoder.compile(
-        optimizer=Adam(lr),
-        loss="mse"
-    )
+def build_decoder(output_dim, latent_dim, hidden_dim, name):
+    inputs = Input(shape=(latent_dim,))
+    x = layers.Dense(hidden_dim, activation="relu")(inputs)
+    outputs = layers.Dense(output_dim)(x)
 
-    history = autoencoder.fit(
-        X_train, X_train,
-        validation_data=(X_validation, X_validation),
-        epochs=50,
-        batch_size=64,
-        callbacks=[EarlyStopping(patience=5)],
+    return Model(inputs, outputs, name=name)
+
+def objective(trial, X_train, X_val, input_dim):
+    latent_dim = trial.suggest_int("latent_dim", 8, 32)
+    hidden_dim = trial.suggest_int("hidden_dim", 32, 128)
+    beta = trial.suggest_float("beta", 0.1, 2.0)
+    lr = trial.suggest_loguniform("lr", 1e-4, 1e-2)
+    batch_size = trial.suggest_categorical("batch_size", [128, 256, 512])
+
+    encoder = build_encoder(input_dim, latent_dim, hidden_dim, "encoder")
+    decoder = build_decoder(input_dim, latent_dim, hidden_dim, "decoder")
+
+    vae = VAE(encoder, decoder, beta)
+    vae.compile(optimizer=Adam(lr))
+
+    vae.fit(
+        X_train,
+        epochs=30,
+        batch_size=batch_size,
+        validation_data=(X_val, None),
         verbose=0
     )
 
-    return min(history.history["val_loss"])
+    # 🔹 Manual validation loss
+    val_loss = 0.0
+    n_batches = 0
+
+    for x in tf.data.Dataset.from_tensor_slices(X_val).batch(batch_size):
+        total, _, _ = vae.compute_loss(x)
+        val_loss += float(total.numpy())
+        n_batches += 1
+
+    val_loss /= n_batches
+
+    return float(val_loss)    
+
+def extract_latent_stats(encoder, X, batch_size=256):
+    """
+    Extract gaussian latent space from a classic Autoencoder
+    """
+    z_mean, z_log_var, z = encoder.predict(X, batch_size=batch_size)
+    
+    return z_mean, z_log_var, z
+
+def reconstruction_error(model, X, batch_size=256):
+    X_hat = model.predict(X, batch_size=batch_size)
+
+    return np.mean((X - X_hat) ** 2, axis=1)
 
 def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
     p_PI_val = expert_PI.predict_proba(X_PI)
@@ -289,13 +370,13 @@ def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
 
     return gate_y
 
-def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+def mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
     # Expert probabilities prediction (N,8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
+    p_test_PI = clf_PI.predict_proba(Z_test_PI)
+    p_test_M = clf_M.predict_proba(Z_test_M)
 
     # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+    w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
 
     # Extract expert weights (N, 1)
     w_PI = w[:, 1].reshape(-1, 1)
@@ -304,13 +385,13 @@ def mixture_of_experts_soft_predict_proba(expert_PI, expert_M, gate, X_test_PI, 
     # Weighted mixture
     return w_PI * p_test_PI + w_M * p_test_M
 
-def mixture_of_experts_hard_predict_proba(expert_PI, expert_M, gate, X_test_PI, X_test_M):
+def mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
     # Expert probabilities prediction (N, 8)
-    p_test_PI = expert_PI.predict_proba(X_test_PI)
-    p_test_M = expert_M.predict_proba(X_test_M)
+    p_test_PI = clf_PI.predict_proba(Z_test_PI)
+    p_test_M = clf_M.predict_proba(Z_test_M)
 
     # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+    w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
 
     # Choose expert per sample (top-1)
     choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
@@ -364,27 +445,43 @@ def plot_reconstruction(model, X, file_name, n_samples=5, title="Autoencoder Rec
     plt.tight_layout()
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
 
+def plot_vae_reconstruction(model, X, file_name, n_samples=5, title="VAE Reconstruction"):
+    idx = np.random.choice(len(X), n_samples, replace=False)
+    X_sel = X[idx]
+
+    X_hat = model.predict(X_sel)
+
+    plt.figure(figsize=(12, 3 * n_samples))
+
+    for i in range(n_samples):
+        # Original
+        plt.subplot(n_samples, 2, 2*i + 1)
+        plt.plot(X_sel[i], label="Original", linewidth=2)
+        plt.title("Original")
+        plt.grid(True)
+
+        # Reconstruction
+        plt.subplot(n_samples, 2, 2*i + 2)
+        plt.plot(X_hat[i], label="Reconstruction", linestyle="--")
+        plt.title("Reconstruction")
+        plt.grid(True)
+
+    plt.suptitle(title, fontsize=14)
+    plt.tight_layout()
+    plt.savefig("images/"+ file_name, dpi=300, bbox_inches="tight")
+
 def compare_reconstruction_errors(model_PI, model_M, X_PI, X_M, file_name):
-    err_PI = np.mean((X_PI - model_PI.predict(X_PI)) ** 2, axis=1)
-    err_M  = np.mean((X_M  - model_M.predict(X_M)) ** 2, axis=1)
+    err_PI = np.mean((X_PI - model_PI.predict(X_PI))**2, axis=1)
+    err_M  = np.mean((X_M  - model_M.predict(X_M))**2, axis=1)
 
     plt.figure(figsize=(8, 4))
-    plt.hist(err_PI, bins=50, alpha=0.7, label="PI Autoencoder")
-    plt.hist(err_M,  bins=50, alpha=0.7, label="M Autoencoder")
+    plt.hist(err_PI, bins=50, alpha=0.7, label="PI")
+    plt.hist(err_M,  bins=50, alpha=0.7, label="M")
     plt.xlabel("Reconstruction MSE")
-    plt.ylabel("Count")
-    plt.title("Reconstruction Error Comparison")
     plt.legend()
+    plt.title("Reconstruction Error Comparison")
     plt.grid(True)
-
-    plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
-
-def get_latent(encoder, X, batch_size=256):
-    """
-    Extract deterministic latent space from a classic Autoencoder
-    """
-    Z = encoder.predict(X, batch_size=batch_size)
-    return Z
+    plt.savefig("images/"+ file_name, dpi=300, bbox_inches="tight")
 
 def compute_tsne(Z, n_components=2, perplexity=30, random_state=42):
     Z_scaled = StandardScaler().fit_transform(Z)
@@ -402,14 +499,14 @@ def compute_tsne(Z, n_components=2, perplexity=30, random_state=42):
     return Z_tsne
 
 def plot_tsne_autoencoder(Z_tsne, y_train, class_names, title, file_name):
-    fig, ax = plt.subplots(figsize=(7, 6))
+    plt.figure(figsize=(7, 6))
 
     unique_classes = np.unique(y_train)
     cmap = plt.get_cmap("tab10")
 
     for i, cls in enumerate(unique_classes):
         idx = y_train == cls
-        ax.scatter(
+        plt.scatter(
             Z_tsne[idx, 0],
             Z_tsne[idx, 1],
             s=15,
@@ -418,25 +515,26 @@ def plot_tsne_autoencoder(Z_tsne, y_train, class_names, title, file_name):
             label=class_names[cls]
         )
 
-    ax.set_xlabel("t-SNE 1")
-    ax.set_ylabel("t-SNE 2")
-    ax.set_title(title)
+    plt.xlabel("t-SNE 1")
+    plt.ylabel("t-SNE 2")
+    plt.title(title)
 
     # Preserve geometry
-    ax.set_aspect("equal", adjustable="box")
+    plt.gca().set_aspect("equal", adjustable="box")
 
-    # Legend outside without squeezing plot
-    ax.legend(
+    # Legend OUTSIDE without shrinking axes
+    plt.legend(
         title="Activity",
         loc="center left",
         bbox_to_anchor=(1.02, 0.5),
         frameon=True
     )
 
-    ax.grid(True)
+    plt.grid(True)
 
-    # Save safely (legend included)
-    plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
+    plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")   
+
+start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
 
@@ -469,157 +567,133 @@ sc = StandardScaler()
 
 X_data = sc.fit_transform(X_data)
 
-print("🟢 Split stack (Training/Validation/Test)")
+print("🟢 Split Dataset (Training/Validation/Test) for PI and M")
 (X_train_PI, X_validation_PI, X_test_PI,
  X_train_M,  X_validation_M,  X_test_M,
  y_train, y_validation, y_test,
  m_train, m_validation, m_test,
  class_names) = participant_group_split(X_data, y_data, m_data)
 
-loops = []
-
-expert_model_test_accuracies_PI = []
-expert_model_test_f1_scores_PI = []
-expert_model_test_accuracies_M = []
-expert_model_test_f1_scores_M = []
-gate_model_test_accuracies = []
-moe_model_test_soft_accuracies = []
-moe_model_test_soft_f1_scores = []
-moe_model_test_hard_accuracies = []
-moe_model_test_hard_f1_scores = []
-
 for loop in range(args.loops):
+    start_loop = time.perf_counter()
+
+    metric = {}
+
     print("🔵 Loop: " + str(loop))
-    loops.append(loop)
 
     print("🟢 Optimize Autoencoder hyperparameters PI")
     study_PI = optuna.create_study(direction="minimize")
-    study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI), n_trials=args.optimize_trials)
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, X_validation_PI, input_dim=91), n_trials=args.optimize_trials)
 
     best_params_PI = study_PI.best_trial.params
     print(best_params_PI)
 
     print("🟢 Optimize Autoencoder hyperparameters M")
     study_M = optuna.create_study(direction="minimize")
-    study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M), n_trials=args.optimize_trials)
+    study_M.optimize(lambda trial: objective(trial, X_train_M, X_validation_M, input_dim=91), n_trials=args.optimize_trials)
 
     best_params_M = study_M.best_trial.params
     print(best_params_M)
 
-    print("🟢 Build Autoencoder with best parameters PI")
+    print("🟢 Build VAE with best parameters PI")
     clear_session()
 
-    autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
+    encoder_PI = build_encoder(91, best_params_PI["latent_dim"], best_params_PI["hidden_dim"], "encoder_PI")
+    decoder_PI= build_decoder(91, best_params_PI["latent_dim"], best_params_PI["hidden_dim"], "decoder_PI")
 
-    print("🟢 Compile Autoencoder PI")
-    autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
+    vae_PI = VAE(encoder_PI, decoder_PI, best_params_PI["beta"])
 
-    autoencoder_PI.summary()
+    print("🟢 Compile VAE PI")
+    vae_PI.compile(optimizer=Adam(best_params_PI["lr"]))
 
-    print("🟢 Build Autoencoder with best parameters M")
+    vae_PI.summary() 
+
+    print("🟢 Train VAE PI")
+    vae_PI.fit(X_train_PI, epochs=80, batch_size=best_params_PI["batch_size"])
+
+    encoder_PI.trainable = False
+
+    print("🟢 Build optimus VAE M")
     clear_session()
 
-    autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    encoder_M = build_encoder(91, best_params_M["latent_dim"], best_params_M["hidden_dim"], "encoder_M")
+    decoder_M = build_decoder(91, best_params_M["latent_dim"], best_params_M["hidden_dim"], "decoder_M")
 
-    print("🟢 Compile Autoencoder M")
-    autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
+    vae_M = VAE(encoder_M, decoder_M, best_params_M["beta"])
 
-    autoencoder_M.summary()
+    print("🟢 Compile VAE M")
+    vae_M.compile(optimizer=Adam(best_params_M["lr"]))
 
-    print("🟢 Compute reconstruction MSE for PI")
-    X_train_pred_PI = autoencoder_PI.predict(X_train_PI)
-    X_test_pred_PI  = autoencoder_PI.predict(X_test_PI)
+    vae_M.summary()
 
-    mse_train_PI = np.mean(np.square(X_train_PI - X_train_pred_PI), axis=1)
-    mse_test_PI  = np.mean(np.square(X_test_PI - X_test_pred_PI),  axis=1)
+    print("🟢 Train VAE M")
+    vae_M.fit(X_train_M, epochs=80, batch_size=best_params_M["batch_size"])
 
-    print("Mean reconstruction MSE for train PI:", np.mean(mse_train_PI))
-    print("Mean reconstruction MSE for test PI:", np.mean(mse_test_PI))
-
-    print("🟢 Compute reconstruction MSE for M")
-    X_train_pred_M = autoencoder_M.predict(X_train_M)
-    X_test_pred_M  = autoencoder_M.predict(X_test_M)
-
-    mse_train_M = np.mean(np.square(X_train_M - X_train_pred_M), axis=1)
-    mse_test_M  = np.mean(np.square(X_test_M - X_test_pred_M),  axis=1)
-
-    print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
-    print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
-
-    if args.generate_plots == True:
-        print("🟢 Latent Space t-SNE plots")
-        z_PI = get_latent(encoder_PI, X_train_PI)
-        z_M  = get_latent(encoder_M, X_train_M)
-
-        Z_PI_tsne = compute_tsne(z_PI)
-        Z_M_tsne  = compute_tsne(z_M)
-
-        plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
-        plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
+    encoder_M.trainable = False
 
     print("🟢 Build classifier PI")
-    Z_validation_PI = encoder_PI.predict(X_validation_PI)
+    # I will use the latent space to train the classifier and the projection z = mu + epsilon * std
+    _, _, Z_train_PI  = extract_latent_stats(encoder_PI, X_train_PI)
 
     clf_PI = LogisticRegression(max_iter=1000)
-    clf_PI.fit(Z_validation_PI, y_validation)
+    clf_PI.fit(Z_train_PI, y_train)
 
-    print("🟢 Validate classifier PI")
-    Z_test_PI = encoder_PI.predict(X_test_PI)
+    print("🟢 Test classifier PI")
+    _, _, Z_test_PI  = extract_latent_stats(encoder_PI, X_test_PI)
 
     y_test_pred_PI = clf_PI.predict(Z_test_PI)
     acc_score_test_PI = accuracy_score(y_test, y_test_pred_PI)
     f1_score_test_PI = f1_score(y_test, y_test_pred_PI, average='macro')
 
-    expert_model_test_accuracies_PI.append(acc_score_test_PI)
-    expert_model_test_f1_scores_PI.append(f1_score_test_PI)
-
     print("🟢 Build classifier M")
-    Z_validation_M = encoder_M.predict(X_validation_M)
+    _, _, Z_train_M  = extract_latent_stats(encoder_M, X_train_M)
 
     clf_M = LogisticRegression(max_iter=1000)
-    clf_M.fit(Z_validation_M, y_validation)
+    clf_M.fit(Z_train_M, y_train)
 
-    print("🟢 Validate classifier M")
-    Z_test_M = encoder_M.predict(X_test_M)
+    print("🟢 Test classifier M")
+    _, _, Z_test_M  = extract_latent_stats(encoder_M, X_test_M)
 
     y_test_pred_M = clf_M.predict(Z_test_M)
     acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
     f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
 
-    expert_model_test_accuracies_M.append(acc_score_test_M)
-    expert_model_test_f1_scores_M.append(f1_score_test_M)
-
     print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([Z_validation_PI, Z_validation_M])
-    y_gate_val = build_gate_router(clf_PI, clf_M, Z_validation_PI, Z_validation_M, y_validation)
+    X_train_pred_PI = clf_PI.predict_proba(Z_train_PI)
+    X_train_pred_M = clf_M.predict_proba(Z_train_M)
 
-    print("🟢 Training gate")
+    #X_gate_val = np.hstack([Z_train_PI, Z_train_M])
+    X_gate_val = np.hstack([X_train_pred_PI, X_train_pred_M])
+    y_gate_val = build_gate_router(clf_PI, clf_M, Z_train_PI, Z_train_M, y_train)
+
+    print("🟢 Train Logistic Regression gate") 
     gate = Pipeline([
         ("scaler", StandardScaler()),
         ("clf", LogisticRegression(
             penalty="l2",
             solver="lbfgs",
-            max_iter=1000
+            max_iter=1000,
+            class_weight="balanced"
         ))
     ])
 
     gate.fit(X_gate_val, y_gate_val)
 
-    print("🟢 Validate gate")
-    Z_test_PI = encoder_PI.predict(X_test_PI)
-    Z_test_M = encoder_M.predict(X_test_M)
+    print("🟢 Test gate")
+    X_test_pred_PI = clf_PI.predict_proba(Z_test_PI)
+    X_test_pred_M = clf_M.predict_proba(Z_test_M)
 
-    X_gate_test = np.hstack([Z_test_PI, Z_test_M])
+    #X_gate_test = np.hstack([Z_test_PI, Z_test_M])
+    X_gate_test = np.hstack([X_test_pred_PI, X_test_pred_M])
     y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
 
     gate_pred = gate.predict(X_gate_test)
 
     gate_acc = (gate_pred == y_gate_test).mean()
 
-    gate_model_test_accuracies.append(gate_acc)
     print("Gate accuracy:", gate_acc)
 
-    print("🟢 Soft Validate MoE")
+    print("🟢 Soft Test MoE")
     p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_soft = p_final_soft.argmax(axis=1)
@@ -627,12 +701,9 @@ for loop in range(args.loops):
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
 
-    moe_model_test_soft_accuracies.append(moe_acc_soft)
-    moe_model_test_soft_f1_scores.append(moe_f1_weight_soft)
-
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Validate MoE")
+    print("🟢 Hard Test MoE")
     p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
 
     y_pred_hard = p_final_hard.argmax(axis=1)
@@ -640,34 +711,48 @@ for loop in range(args.loops):
     moe_acc_hard = accuracy_score(y_test, y_pred_hard)
     moe_f1_weight_hard = f1_score(y_test, y_pred_hard, average="weighted")
 
-    moe_model_test_hard_accuracies.append(moe_acc_soft)
-    moe_model_test_hard_f1_scores.append(moe_f1_weight_soft)
-
     print(f"Hard MoE Accuracy: {moe_acc_hard:.4f}, Hard MoE F1-score: {moe_f1_weight_hard:.4f}")
+
+    print("🟢 Add metrics")
+    metric["loop"] = loop
+
+    metric["expert_model_test_accuracy_PI"] = acc_score_test_PI
+    metric["expert_model_test_f1_score_PI"] = f1_score_test_PI
+    metric["expert_model_test_accuracy_M"] = acc_score_test_M
+    metric["expert_model_test_f1_score_M"] = f1_score_test_M
+    metric["gate_model_test_accuracy"] = gate_acc
+    metric["moe_model_test_soft_accuracy"] = moe_acc_soft
+    metric["moe_model_test_soft_f1_score"] = moe_f1_weight_soft
+    metric["moe_model_test_hard_accuracy"] = moe_acc_soft
+    metric["moe_model_test_hard_f1_score"] = moe_f1_weight_soft
+
+    metrics.append(metric)
 
     if args.generate_plots == True:
         print("🟢 Reconstruction plots")
-        plot_reconstruction_error(autoencoder_PI, X_test_PI, "mse_AE_PI.png", "Reconstruction Error PI")
-        plot_reconstruction_error(autoencoder_M, X_test_M, "mse_AE_M.png", "Reconstruction Error M")
+        plot_reconstruction_error(vae_PI, X_test_PI, "mse_VAE_PI.png", "Reconstruction Error PI")
+        plot_reconstruction_error(vae_M, X_test_M, "mse_VAE_M.png", "Reconstruction Error M")
 
-        plot_reconstruction(autoencoder_PI, X_test_PI, "reconstruction_AE_PI.png", n_samples=5, title="Samples AE Reconstruction PI")
-        plot_reconstruction(autoencoder_M, X_test_M, "reconstruction_AE_M.png", n_samples=5, title="Samples AE Reconstruction M")
+        plot_reconstruction(vae_PI, X_test_PI, "reconstruction_VAE_PI.png", n_samples=5, title="Samples VAE Reconstruction PI")
+        plot_reconstruction(vae_M, X_test_M, "reconstruction_VAE_M.png", n_samples=5, title="Samples VAE Reconstruction M")
 
-        compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
+        compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")  
 
-print("🟢 Save metrics")
-df_metrics = pd.DataFrame({   
-    'loop': loops,
-    'expert_model_test_accuracy_PI': expert_model_test_accuracies_PI,
-    'expert_model_test_f1_score_PI': expert_model_test_f1_scores_PI,
-    'expert_model_test_accuracy_M': expert_model_test_accuracies_M,
-    'expert_model_test_f1_score_M': expert_model_test_f1_scores_M,
-    'gate_model_test_accuracy': gate_model_test_accuracies,
-    'moe_model_test_soft_accuracy': moe_model_test_soft_accuracies,
-    'moe_model_test_soft_f1_score': moe_model_test_soft_f1_scores,
-    'moe_model_test_hard_accuracy': moe_model_test_hard_accuracies,
-    'moe_model_test_hard_f1_score': moe_model_test_hard_f1_scores,
-})
+        print("🟢 Latent Space t-SNE plots")
+        z_mu_PI, z_lv_PI = extract_latent_stats(encoder_PI, X_train_PI)
+        z_mu_M, z_lv_M  = extract_latent_stats(encoder_M, X_train_M)
+
+        Z_PI_tsne = compute_tsne(z_mu_PI)
+        Z_M_tsne  = compute_tsne(z_mu_M)
+
+        plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="VAE Latent Space (PI)", file_name="tsne_VAE_latent_PI.png")
+        plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="VAE Latent Space (M)", file_name="tsne_VAE_latent_M.png")
+
+    elapsed_loop = time.perf_counter() - start_loop
+    print(f"Loop time: {elapsed_loop:.2f} seconds") 
+
+print("🟢 Calculate metrics mean and standard deviations")
+df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
 mean_row = df_metrics.mean(numeric_only=True)
@@ -683,4 +768,8 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
-df_metrics.to_csv(str(Path.cwd()) + "/results/moe_ae_metrics.csv", index=False)     
+print("🟢 Save metrics")
+df_metrics.to_csv(str(Path.cwd()) + "/paper/4_moe_vae/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
+
+elapsed_app = time.perf_counter() - start_app
+print(f"Application time: {elapsed_app:.2f} seconds")

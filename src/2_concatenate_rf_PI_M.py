@@ -5,10 +5,8 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold, cross_validate
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
@@ -120,17 +118,8 @@ def parse_args(args):
         "-superclases",
         "--superclases",
         dest="superclases",    
-        help=f"Use Superclases: Captured24, CPA-METS"
-    )         
-    parser.add_argument(
-        "-k-folds",
-        "--k-folds",
-        type=int,
-        default=5,
-        dest="k_folds",       
-        required=True,
-        help=f"k-Folds for train."
-    )        
+        help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
+    )       
     parser.add_argument(
         "-loops",
         "--loops",
@@ -157,6 +146,14 @@ def parse_args(args):
     )    
     return parser.parse_args(args)
 
+def get_save_path(superclases):
+    if superclases == 'CPA-METS':
+        return '4_classes'
+    elif superclases == 'Captured24':
+        return '8_classes'
+    else:
+        return '15_classes'
+
 def pretreatment(y_data):
     # Get indices of elements to remove
     indices_to_remove = [i for i, lbl in enumerate(y_data) if lbl in ACTIVITIES_TO_BE_REMOVED]
@@ -170,74 +167,18 @@ def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, test_size=0.2):
-    # split concatate dataset between train and test
-    unique_groups = np.unique(m_data)
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    n_test = int(len(unique_groups) * test_size)
-    test_groups = unique_groups[-n_test:]
-    train_groups = unique_groups[:-n_test]
+    train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
 
-    train_idx = np.where(np.isin(m_data, train_groups))[0]
-    test_idx  = np.where(np.isin(m_data, test_groups))[0]    
+    X_train, X_test = X_data[train_idx], X_data[test_idx]
+    y_train, y_test = y_data[train_idx], y_data[test_idx]
+    m_train, m_test = m_data[train_idx], m_data[test_idx]
 
-    X_train = X_data[train_idx]
-    X_test = X_data[test_idx]
-    
-    y_train = y_data[train_idx]
-    y_test = y_data[test_idx]
+    print(f"Unique participants in train: {np.unique(m_train)}")
+    print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    m_train = m_data[train_idx]
-    m_test = m_data[test_idx]
-
-    print(f"Participants for train: {len(np.unique(m_data[train_idx]))}")
-    print(f"Participants for test:  {len(np.unique(m_data[test_idx]))}")
-    
     return X_train, X_test, y_train, y_test, m_train, m_test
-
-def model_kfold_cross_validate(X_train, y_train, m_train, k):
-    start_cross = time.perf_counter()
-
-    # classifier model
-    model = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    )
-
-    # Cross-validation strategy
-    gkf = GroupKFold(n_splits=k, shuffle=True)
-        
-    # Execute cross-validation       
-    cv_scores = cross_validate(
-        model,
-        X_train,
-        y_train,
-        cv=gkf,
-        groups=m_train,
-        scoring={
-            "accuracy": "accuracy",
-            "f1_macro": "f1_macro"
-        },
-        n_jobs=1
-    )
-
-    metrics = {
-        "model_accuracy_test": float(cv_scores["test_accuracy"].mean()),
-        "model_f1_score_test": float(cv_scores["test_f1_macro"].mean()),
-    }
-
-    # Train classifier model
-    model.fit(X_train, y_train)
-
-    # cross validation time tracking
-    elapsed_cross = time.perf_counter() - start_cross
-    print(f"Cross-validation time: {elapsed_cross:.2f} seconds")
-
-    return model, metrics        
 
 start_app = time.perf_counter()
 
@@ -268,49 +209,51 @@ elif (args.superclases == "CPA-METS"):
     (y_data) = superclases_cpa_mets(y_data)
 
 participant_ids = np.sort(np.unique(m_data))
-
 print("Total participants:", len(participant_ids))
-
-loops = []
-
-model_train_accuracies = []
-model_train_f1_scores = []
-model_test_accuracies = []
-model_test_f1_scores = []
 
 for loop in range(args.loops):
     start_loop = time.perf_counter()
-        
     print("🔵 Loop: " + str(loop))
+
+    metric = {}
 
     print("🟢 Split dataset PI+M")
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
-
-    print("\n")
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
-    print("\n")    
    
-    print("🟢 k-Fold cross validation model")
-    model, metrics = model_kfold_cross_validate(X_train, y_train, m_train, args.k_folds)
+    print("🟢 training model")
+    model = RandomForestClassifier(        
+        n_estimators=N_ESTIMATORS,                     
+        max_depth=MAX_DEPTH,
+        max_features= MAX_FEATURES,                 
+        min_samples_split=MIN_SAMPLES_SPLIT,        
+        min_samples_leaf=MIN_SAMPLES_LEAF,
+        n_jobs=-1,
+        verbose=1   
+    )
+
+    model.fit(X_train, y_train)
 
     print("🟢 Validate model")
-    model_test_accuracy = accuracy_score(y_test, model.predict(X_test))
-    model_test_f1_score = f1_score(y_test, model.predict(X_test), average='macro')
+    X_pr_model_test = model.predict(X_test)
 
-    print("🟢 Append model metrics")
-    loops.append(loop)
-    model_test_accuracies.append(metrics["model_accuracy_test"])
-    model_test_f1_scores.append(metrics["model_f1_score_test"])
+    model_accuracy_test = accuracy_score(y_test, X_pr_model_test)
+    model_f1_score_test = f1_score(y_test, X_pr_model_test, average='macro')
+
+    # save meta model metrics
+    metric["loop"] = loop
+
+    metric["model_accuracy_test"] = model_accuracy_test
+    metric["model_f1_score_test"] = model_f1_score_test
+
+    # add metrics to collection
+    metrics.append(metric)
 
     elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")
 
-print("🟢 Save metrics")
-df_metrics = pd.DataFrame({   
-    'loop': loops,
-    'model_test_accuracy': model_test_accuracies,
-    'model_test_f1_score': model_test_f1_scores,
-})
+print("🟢 Calculate metrics mean and standard deviations")
+df_metrics = pd.DataFrame(metrics)
 
 # Compute mean and std (numeric columns only)
 mean_row = df_metrics.mean(numeric_only=True)
@@ -326,7 +269,8 @@ df_metrics = pd.concat(
     ignore_index=True
 )
 
-df_metrics.to_csv(str(Path.cwd()) + "/results/concatenate_rf_metrics.csv", index=False)
+print("🟢 Save metrics")
+df_metrics.to_csv(str(Path.cwd()) + "/paper/2_concatenate/" + get_save_path(args.superclases) + "/metrics.csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

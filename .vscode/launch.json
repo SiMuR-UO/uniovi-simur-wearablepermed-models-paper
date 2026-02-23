@@ -10,48 +10,44 @@
           "request": "launch",
           "program": "${file}",
           "args": [
-            // 0-Dataset generator concatenating PI and M Datasets: 0_dataset_generator.py
+            // 0-Dataset generator concatenating PI and M Datasets: 0_concatenated_segment_bodies.py
 
             // 0-Model Comparation: 0_lazypredict_models.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--segment-body", "PI",
             //"--superclases", "Captured24",
 
+            // 0-Plot Whisker/box chart for all classifiers: 0_plot_whisker_box_all.py
+            // 0-Plot Whisker/box Grouped chart for all classifiers: 0_plot_whisker_box_grouped.py
+
             // 1-Individual Random Forest classifier model: 2_individual_rf.py
-            "--stack-all", "./datasets/X_y_m_final.npz",
-            "--segment-body", "PI",
-            "--superclases", "Captured24",            
-            "--loops", "30",
+            //"--stack-all", "./datasets/X_y_m_final.npz",
+            //"--segment-body", "PI",
+            //"--superclases", "Captured24",
 
             // 2-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",            
-            //"--loops", "30",
+            //"--superclases", "Captured24",
 
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
-            //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",            
-            //"--loops", "30",
+            "--stack-all", "./datasets/X_y_m_final.npz",
+            "--superclases", "Captured24",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
-            //"--loops", "30",
 
             // 4-MoE with two Random Forest experts and one Logistic Regression Gate: 3_mixture_of_experts_rf_PI_M.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
-            //"--loops", "30",
 
             // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_ae_PI_M.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
-            //"--loops", "30",
 
             // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_vae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
-            //"--loops", "30",
           ],
           "console": "integratedTerminal"
         }

@@ -6,9 +6,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import optuna
-from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
@@ -96,7 +95,8 @@ WINDOW_METADATA = "arr_2"
 # MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 # MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
 
-N_TRIALS = 5
+N_TRIALS = 5 # You can increase n_trials for better tuning
+N_SPLITS = 3
 CV = 3
 
 metrics = []
@@ -185,7 +185,7 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
 
     return X_train, X_test, y_train, y_test, m_train, m_test
 
-def objective(trial, X_train, y_train):
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
     max_depth = trial.suggest_int("max_depth", 2, 20)
@@ -193,6 +193,8 @@ def objective(trial, X_train, y_train):
     min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
     min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
     
+    cv = GroupKFold(n_splits=n_splits)
+
     # Create model with suggested hyperparameters
     clf = RandomForestClassifier(
         n_estimators=n_estimators,
@@ -204,8 +206,14 @@ def objective(trial, X_train, y_train):
         verbose=1
     )
     
-    # Evaluate using cross-validation
-    score = cross_val_score(clf, X_train, y_train, cv=CV, scoring="accuracy").mean()
+    # Evaluate using K-Fold cross-validation
+    score = cross_val_score(
+        clf,
+        X_train,
+        y_train,
+        cv=cv,
+        groups=m_train,
+        scoring="accuracy").mean()
     
     # Optuna tries to maximize accuracy
     return score
@@ -254,7 +262,7 @@ for loop in range(args.loops):
     print("🟢 Get best hyperparameters concatenated model")
     study = optuna.create_study(direction="maximize", study_name="2_concatenate_rf_PI_M")
 
-    study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    study.optimize(lambda trial: objective(trial, X_train, y_train, m_train), n_trials=N_TRIALS)
     
     trial = study.best_trial
 

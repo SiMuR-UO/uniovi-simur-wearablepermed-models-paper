@@ -95,7 +95,7 @@ WINDOW_METADATA = "arr_2"
 # MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
 # MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
 
-N_TRIALS = 5
+N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 CV = 3
 
@@ -281,7 +281,7 @@ for loop in range(args.loops):
     print("🟢 Get best hyperparameters")
     study = optuna.create_study(direction="maximize", study_name="1_individual_rf")
 
-    study.optimize(lambda trial: objective(trial, X_train, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    study.optimize(lambda trial: objective(trial, X_train, y_train, m_train), n_trials=N_TRIALS)
     
     trial = study.best_trial
 

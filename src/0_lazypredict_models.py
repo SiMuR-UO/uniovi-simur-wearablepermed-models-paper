@@ -1,15 +1,10 @@
 import sys
-import time
 import argparse
 import logging
 from pathlib import Path
 import numpy as np
-import pandas as pd
-import optuna
 from sklearn.model_selection import GroupShuffleSplit
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import accuracy_score, f1_score
+from lazypredict.Supervised import LazyClassifier
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
                      'INCREMENTAL CICLOERGOMETRO', 'YOGA', 'SENTADO VIENDO LA TV',
@@ -90,17 +85,6 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-# MAX_FEATURES=0.2
-# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-
-N_TRIALS = 5
-CV = 3
-
-metrics = []
-
 def parse_args(args):
     """Parse command line parameters
 
@@ -131,15 +115,7 @@ def parse_args(args):
         required=True,
         dest="segment_body",    
         help=f"Segment Body: PI, M"
-    )           
-    parser.add_argument(
-        "-loops",
-        "--loops",
-        dest="loops",        
-        type=int,        
-        default=30,        
-        help="Number of loops."
-    )            
+    )          
     parser.add_argument(
         "-v",
         "--verbose",
@@ -155,16 +131,9 @@ def parse_args(args):
         help="set loglevel to DEBUG.",
         action="store_const",
         const=logging.DEBUG,
-    )    
+    )
+    
     return parser.parse_args(args)
-
-def get_save_path(superclases):
-    if superclases == 'CPA-METS':
-        return '4_classes'
-    elif superclases == 'Captured24':
-        return '8_classes'
-    else:
-        return '15_classes'
 
 def pretreatment(y_data):
     # Get indices of elements to remove
@@ -204,33 +173,6 @@ def participant_group_split(X_data, y_data, m_data, segment_body, test_size=0.2)
     else:
         raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
 
-def objective(trial, X_train, y_train):
-    # Suggest hyperparameters
-    n_estimators = trial.suggest_int("n_estimators", 50, 500)
-    max_depth = trial.suggest_int("max_depth", 2, 20)
-    max_features = trial.suggest_float("max_features", 0.1, 1.0)    
-    min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
-    min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
-    
-    # Create model with suggested hyperparameters
-    clf = RandomForestClassifier(
-        n_estimators=n_estimators,
-        max_depth=max_depth,
-        max_features=max_features,        
-        min_samples_split=min_samples_split,
-        min_samples_leaf=min_samples_leaf,
-        n_jobs=-1,
-        verbose=1
-    )
-    
-    # Evaluate using cross-validation
-    score = cross_val_score(clf, X_train, y_train, cv=CV, scoring="accuracy").mean()
-    
-    # Optuna tries to maximize accuracy
-    return score
-
-start_app = time.perf_counter()
-
 args = parse_args(sys.argv[1:])
 
 print("🟢 load stack PI+M")
@@ -260,83 +202,38 @@ elif (args.superclases == "CPA-METS"):
 participant_ids = np.sort(np.unique(m_data))
 print("Total participants:", len(participant_ids))
 
-for loop in range(args.loops):
-    start_loop = time.perf_counter()
-    print("🔵 Loop: " + str(loop))
+print("🟢 Split dataset PI+M")
+(X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
 
-    metric = {}
+clf = LazyClassifier(verbose=0, ignore_warnings=True)
+models, predictions = clf.fit(X_train, X_test, y_train, y_test)
 
-    print("🟢 Split dataset PI+M")
-    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
-    print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
-   
-    print("🟢 Run the Optuna Study")
-    study = optuna.create_study(direction="maximize", study_name="1_individual_rf")
+print(models)
 
-    study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
-    
-    print("🟢 Training best model")
-    trial = study.best_trial
-
-    print(f"Accuracy: {trial.value}")
-    print("Best hyperparameters: ")
-    for key, value in trial.params.items():
-        print(f"    {key}: {value}")
-
-    best_params = trial.params
-    best_model = RandomForestClassifier(**best_params, n_jobs=-1)
-    best_model.fit(X_train, y_train)
-
-    # print("🟢 training model")
-    # model = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH,
-    #     max_features= MAX_FEATURES,                 
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1   
-    # )
-
-    # model.fit(X_train, y_train)
-
-    print("🟢 Validate model")
-    # model_accuracy_test = accuracy_score(y_test, model.predict(X_test))
-    # model_f1_score_test = f1_score(y_test, model.predict(X_test), average='macro')
-    model_accuracy_test = accuracy_score(y_test, best_model.predict(X_test))
-    model_f1_score_test = f1_score(y_test, best_model.predict(X_test), average='macro')
-
-    # save meta model metrics
-    metric["loop"] = loop
-
-    metric["model_accuracy_test"] = model_accuracy_test
-    metric["model_f1_score_test"] = model_f1_score_test
-
-    # add metrics to collection
-    metrics.append(metric)
-
-    elapsed_loop = time.perf_counter() - start_loop
-    print(f"Loop time: {elapsed_loop:.2f} seconds")
-
-print("🟢 Calculate metrics mean and standard deviations")
-df_metrics = pd.DataFrame(metrics)
-
-# Compute mean and std (numeric columns only)
-mean_row = df_metrics.mean(numeric_only=True)
-std_row = df_metrics.std(numeric_only=True)
-
-# Add a label for the index column
-mean_row["loop"] = "mean"
-std_row["loop"] = "std"
-
-# Append to dataframe
-df_metrics = pd.concat(
-    [df_metrics, pd.DataFrame([mean_row, std_row])],
-    ignore_index=True
-)
-
-print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_" + args.segment_body.lower() + ".csv", index=False)
-
-elapsed_app = time.perf_counter() - start_app
-print(f"Application time: {elapsed_app:.2f} seconds")
+#                                Accuracy  Balanced Accuracy ROC AUC  F1 Score  Time Taken
+# Model                                                                                   
+# LGBMClassifier                     0.92               0.91    None      0.92        2.82
+# ExtraTreesClassifier               0.92               0.90    None      0.92        1.65
+# BaggingClassifier                  0.92               0.90    None      0.92       11.45
+# SVC                                0.90               0.89    None      0.90        3.37
+# RandomForestClassifier             0.91               0.89    None      0.91       11.96
+# LinearSVC                          0.90               0.87    None      0.90        3.97
+# LogisticRegression                 0.88               0.87    None      0.88       10.03
+# SGDClassifier                      0.86               0.86    None      0.87        1.81
+# DecisionTreeClassifier             0.89               0.86    None      0.89        1.84
+# LinearDiscriminantAnalysis         0.86               0.84    None      0.87        0.21
+# Perceptron                         0.85               0.83    None      0.85        0.45
+# CalibratedClassifierCV             0.88               0.83    None      0.88       15.64
+# ExtraTreeClassifier                0.83               0.82    None      0.84        0.09
+# KNeighborsClassifier               0.86               0.80    None      0.85        0.33
+# PassiveAggressiveClassifier        0.85               0.79    None      0.85        0.56
+# BernoulliNB                        0.76               0.78    None      0.77        0.11
+# GaussianNB                         0.68               0.77    None      0.68        0.11
+# NearestCentroid                    0.72               0.76    None      0.73        0.10
+# RidgeClassifier                    0.84               0.75    None      0.83        0.09
+# RidgeClassifierCV                  0.84               0.75    None      0.83        0.45
+# QuadraticDiscriminantAnalysis      0.73               0.74    None      0.73        0.22
+# LabelPropagation                   0.67               0.62    None      0.69        7.54
+# LabelSpreading                     0.67               0.62    None      0.69       17.39
+# AdaBoostClassifier                 0.74               0.60    None      0.70        7.56
+# DummyClassifier                    0.27               0.12    None      0.11        0.06

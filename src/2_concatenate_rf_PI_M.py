@@ -251,7 +251,7 @@ for loop in range(args.loops):
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
-    print("🟢 Get best hyperparameters")
+    print("🟢 Get best hyperparameters concatenated model")
     study = optuna.create_study(direction="maximize", study_name="2_concatenate_rf_PI_M")
 
     study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning

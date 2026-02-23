@@ -5,8 +5,10 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import optuna
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
 from sklearn.metrics import accuracy_score, f1_score
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
@@ -88,11 +90,14 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-MAX_FEATURES=0.2
-MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
+# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
+# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
+# MAX_FEATURES=0.2
+# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
+# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
+
+N_TRIALS = 5
+CV = 3
 
 metrics = []
 
@@ -180,6 +185,31 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
 
     return X_train, X_test, y_train, y_test, m_train, m_test
 
+def objective(trial, X_train, y_train):
+    # Suggest hyperparameters
+    n_estimators = trial.suggest_int("n_estimators", 50, 500)
+    max_depth = trial.suggest_int("max_depth", 2, 20)
+    max_features = trial.suggest_float("max_features", 0.1, 1.0)    
+    min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
+    min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
+    
+    # Create model with suggested hyperparameters
+    clf = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        max_features=max_features,        
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        n_jobs=-1,
+        verbose=1
+    )
+    
+    # Evaluate using cross-validation
+    score = cross_val_score(clf, X_train, y_train, cv=CV, scoring="accuracy").mean()
+    
+    # Optuna tries to maximize accuracy
+    return score
+
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -221,16 +251,32 @@ for loop in range(args.loops):
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
-    print("🟢 training model")
-    model = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    )
+    print("🟢 Get best hyperparameters")
+    study = optuna.create_study(direction="maximize", study_name="2_concatenate_rf_PI_M")
+
+    study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial = study.best_trial
+
+    print(f"Accuracy: {trial.value}")
+    print("Best hyperparameters: ")
+    for key, value in trial.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters")
+    best_params = trial.params
+    model = RandomForestClassifier(**best_params, n_jobs=-1)
+   
+    # print("🟢 training model")
+    # model = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH,
+    #     max_features= MAX_FEATURES,                 
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1   
+    # )
 
     model.fit(X_train, y_train)
 

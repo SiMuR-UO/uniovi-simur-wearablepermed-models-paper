@@ -7,8 +7,9 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+import optuna
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GroupShuffleSplit, GridSearchCV, GroupKFold
+from sklearn.model_selection import GroupShuffleSplit, GridSearchCV, GroupKFold, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -93,13 +94,16 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-MAX_FEATURES=0.2
-MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
+# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
+# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
+# MAX_FEATURES=0.2
+# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
+# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
 
 metrics = []
+
+N_TRIALS = 5
+CV = 3
 
 def parse_args(args):
     """Parse command line parameters
@@ -250,6 +254,31 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
 
     return model, X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
 
+def objective(trial, X_train, y_train):
+    # Suggest hyperparameters
+    n_estimators = trial.suggest_int("n_estimators", 50, 500)
+    max_depth = trial.suggest_int("max_depth", 2, 20)
+    max_features = trial.suggest_float("max_features", 0.1, 1.0)    
+    min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
+    min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
+    
+    # Create model with suggested hyperparameters
+    clf = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        max_features=max_features,        
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        n_jobs=-1,
+        verbose=1
+    )
+    
+    # Evaluate using cross-validation
+    score = cross_val_score(clf, X_train, y_train, cv=CV, scoring="accuracy").mean()
+    
+    # Optuna tries to maximize accuracy
+    return score
+
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -297,16 +326,32 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 Create model PI")
-    base_model_PI = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    )
+    print("🟢 Get best hyperparameters model PI")
+    study_PI = optuna.create_study(direction="maximize", study_name="3_stack_rf_PI")
+
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial_PI = study_PI.best_trial
+
+    print(f"Accuracy PI: {trial_PI.value}")
+    print("Best hyperparameters PI: ")
+    for key, value in trial_PI.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters PI")
+    best_params_PI = trial_PI.params
+    base_model_PI = RandomForestClassifier(**best_params_PI, n_jobs=-1)
+
+    # print("🟢 Create model PI")
+    # base_model_PI = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH,
+    #     max_features= MAX_FEATURES,                 
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1   
+    # )
     
     # print("🟢 Cross Training model PI")
     # (base_model_PI,
@@ -328,16 +373,32 @@ for loop in range(args.loops):
     p_y_tr = y_train
     p_m_tr = m_train
 
-    print("🟢 Create model M")
-    base_model_M = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH,
-        max_features= MAX_FEATURES,                 
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1   
-    ) 
+    print("🟢 Get best hyperparameters model M")
+    study_M = optuna.create_study(direction="maximize", study_name="3_stack_rf_M")
+
+    study_M.optimize(lambda trial: objective(trial, X_train_M, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial_M = study_M.best_trial
+
+    print(f"Accuracy M: {trial_M.value}")
+    print("Best hyperparameters M: ")
+    for key, value in trial_M.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters M")
+    best_params_M = trial_M.params
+    base_model_M = RandomForestClassifier(**best_params_M, n_jobs=-1)
+
+    # print("🟢 Create model M")
+    # base_model_M = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH,
+    #     max_features= MAX_FEATURES,                 
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1   
+    # ) 
 
     # print("🟢 Cross Training model M")
     # (base_model_M,

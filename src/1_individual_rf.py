@@ -282,7 +282,7 @@ for loop in range(args.loops):
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
 
-    print("🟢 training model with best hyperparmeters")
+    print("🟢 training model with best hyperparmeters individual model")
     best_params = trial.params
     model = RandomForestClassifier(**best_params, n_jobs=-1)
 

@@ -270,12 +270,11 @@ for loop in range(args.loops):
     (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
-    print("🟢 Run the Optuna Study")
+    print("🟢 Get best hyperparameters")
     study = optuna.create_study(direction="maximize", study_name="1_individual_rf")
 
     study.optimize(lambda trial: objective(trial, X_train, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
     
-    print("🟢 Training best model")
     trial = study.best_trial
 
     print(f"Accuracy: {trial.value}")
@@ -283,9 +282,9 @@ for loop in range(args.loops):
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
 
+    print("🟢 training model with best hyperparmeters")
     best_params = trial.params
-    best_model = RandomForestClassifier(**best_params, n_jobs=-1)
-    best_model.fit(X_train, y_train)
+    model = RandomForestClassifier(**best_params, n_jobs=-1)
 
     # print("🟢 training model")
     # model = RandomForestClassifier(        
@@ -298,13 +297,11 @@ for loop in range(args.loops):
     #     verbose=1   
     # )
 
-    # model.fit(X_train, y_train)
+    model.fit(X_train, y_train)
 
     print("🟢 Validate model")
-    # model_accuracy_test = accuracy_score(y_test, model.predict(X_test))
-    # model_f1_score_test = f1_score(y_test, model.predict(X_test), average='macro')
-    model_accuracy_test = accuracy_score(y_test, best_model.predict(X_test))
-    model_f1_score_test = f1_score(y_test, best_model.predict(X_test), average='macro')
+    model_accuracy_test = accuracy_score(y_test, model.predict(X_test))
+    model_f1_score_test = f1_score(y_test, model.predict(X_test), average='macro')
 
     # save meta model metrics
     metric["loop"] = loop

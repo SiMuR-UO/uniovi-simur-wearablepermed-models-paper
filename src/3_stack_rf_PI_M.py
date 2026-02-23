@@ -102,7 +102,8 @@ WINDOW_METADATA = "arr_2"
 
 metrics = []
 
-N_TRIALS = 5
+N_TRIALS = 5 # You can increase n_trials for better tuning
+N_SPLITS = 3
 CV = 3
 
 def parse_args(args):
@@ -254,7 +255,7 @@ def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
 
     return model, X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
 
-def objective(trial, X_train, y_train):
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
     max_depth = trial.suggest_int("max_depth", 2, 20)
@@ -262,6 +263,8 @@ def objective(trial, X_train, y_train):
     min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
     min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
     
+    cv = GroupKFold(n_splits=n_splits)
+
     # Create model with suggested hyperparameters
     clf = RandomForestClassifier(
         n_estimators=n_estimators,
@@ -273,8 +276,14 @@ def objective(trial, X_train, y_train):
         verbose=1
     )
     
-    # Evaluate using cross-validation
-    score = cross_val_score(clf, X_train, y_train, cv=CV, scoring="accuracy").mean()
+    # Evaluate using K-Fold cross-validation
+    score = cross_val_score(
+        clf,
+        X_train,
+        y_train,
+        cv=cv,
+        groups=m_train,
+        scoring="accuracy").mean()
     
     # Optuna tries to maximize accuracy
     return score
@@ -329,7 +338,7 @@ for loop in range(args.loops):
     print("🟢 Get best hyperparameters model PI")
     study_PI = optuna.create_study(direction="maximize", study_name="3_stack_rf_PI")
 
-    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
     
     trial_PI = study_PI.best_trial
 
@@ -376,7 +385,7 @@ for loop in range(args.loops):
     print("🟢 Get best hyperparameters model M")
     study_M = optuna.create_study(direction="maximize", study_name="3_stack_rf_M")
 
-    study_M.optimize(lambda trial: objective(trial, X_train_M, y_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    study_M.optimize(lambda trial: objective(trial, X_train_M, y_train, m_train), n_trials=N_TRIALS)
     
     trial_M = study_M.best_trial
 

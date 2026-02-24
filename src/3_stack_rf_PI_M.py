@@ -94,17 +94,11 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-# MAX_FEATURES=0.2
-# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-
-metrics = []
-
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 CV = 3
+
+metrics = []
 
 def parse_args(args):
     """Parse command line parameters
@@ -288,6 +282,61 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Optuna tries to maximize accuracy
     return score
 
+def generate_oof_predictions(
+    X_PI,
+    X_M,
+    y,
+    groups,
+    n_splits=5,
+    rf_params_PI=None,
+    rf_params_M=None,
+    random_state=42
+):
+    """
+    Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
+    using grouped cross-validation.
+    """
+    gkf = GroupKFold(n_splits=n_splits)
+
+    n_samples = X_PI.shape[0]
+    n_classes = len(np.unique(y))
+
+    # Allocate OOF prediction matrices
+    p_PI_oof = np.zeros((n_samples, n_classes))
+    p_M_oof = np.zeros((n_samples, n_classes))
+
+    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
+        print(f"Fold {fold+1}/{n_splits}")
+
+        # Split data
+        X_PI_train, X_PI_val = X_PI[train_idx], X_PI[val_idx]
+        X_M_train, X_M_val = X_M[train_idx], X_M[val_idx]
+        y_train = y[train_idx]
+
+        # --- Train expert PI ---
+        expert_PI = RandomForestClassifier(
+            random_state=random_state,
+            n_jobs=-1,
+            **rf_params_PI
+        )
+        expert_PI.fit(X_PI_train, y_train)
+
+        # Predict on validation fold
+        p_PI_oof[val_idx] = expert_PI.predict_proba(X_PI_val)
+
+        # --- Train expert M ---
+        expert_M = RandomForestClassifier(
+            random_state=random_state,
+            n_jobs=-1,
+            **rf_params_M
+        )
+        expert_M.fit(X_M_train, y_train)
+
+        # Predict on validation fold
+        p_M_oof[val_idx] = expert_M.predict_proba(X_M_val)
+
+    return p_PI_oof, p_M_oof
+
 start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
@@ -351,17 +400,6 @@ for loop in range(args.loops):
     best_params_PI = trial_PI.params
     base_model_PI = RandomForestClassifier(**best_params_PI, n_jobs=-1)
 
-    # print("🟢 Create model PI")
-    # base_model_PI = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH,
-    #     max_features= MAX_FEATURES,                 
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1   
-    # )
-    
     # print("🟢 Cross Training model PI")
     # (base_model_PI,
     #  p_X_tr_PI,
@@ -377,11 +415,6 @@ for loop in range(args.loops):
     model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
     model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
     
-    print("🟢 Base predictions model PI")
-    p_X_tr_PI = base_model_PI.predict_proba(X_train_PI)
-    p_y_tr = y_train
-    p_m_tr = m_train
-
     print("🟢 Get best hyperparameters model M")
     study_M = optuna.create_study(direction="maximize", study_name="3_stack_rf_M")
 
@@ -398,17 +431,6 @@ for loop in range(args.loops):
     best_params_M = trial_M.params
     base_model_M = RandomForestClassifier(**best_params_M, n_jobs=-1)
 
-    # print("🟢 Create model M")
-    # base_model_M = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH,
-    #     max_features= MAX_FEATURES,                 
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1   
-    # ) 
-
     # print("🟢 Cross Training model M")
     # (base_model_M,
     #  p_X_tr_M,
@@ -424,10 +446,16 @@ for loop in range(args.loops):
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
 
-    print("🟢 Base predictions model M")
-    p_X_tr_M = base_model_M.predict_proba(X_train_M)
-    p_y_tr = y_train
-    p_m_tr = m_train
+    print("🟢 Generate validation folds prediction for PI and M (OOF predictions of experts)")
+    p_X_tr_PI, p_X_tr_M = generate_oof_predictions(
+        X_train_PI,
+        X_train_M,
+        y_train,
+        m_train,
+        n_splits=3,
+        rf_params_PI=best_params_PI,
+        rf_params_M=best_params_M
+    )
 
     print("🟢 Get correlation between PI and M Probabilistics Distributions")
     print("Correlation of the first column in the Probabilistics Distribution: " + str(np.corrcoef(p_X_tr_PI[:,1], p_X_tr_M[:,1])))
@@ -446,7 +474,7 @@ for loop in range(args.loops):
     ])
 
     print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
-    model_meta.fit(stack_X_tr, p_y_tr)
+    model_meta.fit(stack_X_tr, y_train)
 
     # print("🟢 Train meta model (Random Forest with fix hyperparameters) with concatenated probability distribution from PI and M")
     # model_meta = RandomForestClassifier(        

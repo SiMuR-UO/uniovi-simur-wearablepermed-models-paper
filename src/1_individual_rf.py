@@ -89,12 +89,6 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-# MAX_FEATURES=0.2
-# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
-
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 CV = 3
@@ -293,17 +287,6 @@ for loop in range(args.loops):
     print("🟢 training model with best hyperparmeters individual model")
     best_params = trial.params
     model = RandomForestClassifier(**best_params, n_jobs=-1)
-
-    # print("🟢 training model")
-    # model = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH,
-    #     max_features= MAX_FEATURES,                 
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1   
-    # )
 
     model.fit(X_train, y_train)
 

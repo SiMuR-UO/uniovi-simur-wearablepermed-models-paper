@@ -10,10 +10,10 @@ import pandas as pd
 import optuna
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GroupShuffleSplit, GridSearchCV, GroupKFold, cross_val_score
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
                      'INCREMENTAL CICLOERGOMETRO', 'YOGA', 'SENTADO VIENDO LA TV',
@@ -283,15 +283,15 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     return score
 
 def generate_oof_predictions(
-    X_PI,
-    X_M,
-    y,
-    groups,
-    n_splits=5,
-    rf_params_PI=None,
-    rf_params_M=None,
-    random_state=42
-):
+        X_PI,
+        X_M,
+        y,
+        groups,
+        n_splits=5,
+        rf_params_PI=None,
+        rf_params_M=None,
+        random_state=42
+    ):
     """
     Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
     using grouped cross-validation.
@@ -446,7 +446,7 @@ for loop in range(args.loops):
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
 
-    print("🟢 Generate validation folds prediction for PI and M (OOF predictions of experts)")
+    print("🟢 Generate base predictions from validation folds for PI and M (OOF predictions of experts)")
     p_X_tr_PI, p_X_tr_M = generate_oof_predictions(
         X_train_PI,
         X_train_M,

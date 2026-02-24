@@ -4,11 +4,12 @@ import argparse
 import logging
 import numpy as np
 import pandas as pd
+import optuna
 from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -92,11 +93,15 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
-MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
-MAX_FEATURES=0.2
-MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
-MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
+# N_ESTIMATORS=493     # More trees → more stability and accuracy (to a point), but slower.
+# MAX_DEPTH=6          # Lower → less overfitting (shallow trees). -> Resolve the overfitting.
+# MAX_FEATURES=0.2
+# MIN_SAMPLES_SPLIT=41 # Higher values = simpler model, less overfitting.
+# MIN_SAMPLES_LEAF=24  # Larger → smoother predictions, less overfitting.
+
+N_TRIALS = 5 # You can increase n_trials for better tuning
+N_SPLITS = 3
+CV = 3
 
 metrics = []
 
@@ -209,9 +214,89 @@ def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2)
         m_train, m_val, m_test
     )  
 
-def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
-    p_PI_val = expert_PI.predict_proba(X_PI)
-    p_M_val = expert_M.predict_proba(X_M)
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
+    # Suggest hyperparameters
+    n_estimators = trial.suggest_int("n_estimators", 50, 500)
+    max_depth = trial.suggest_int("max_depth", 2, 20)
+    max_features = trial.suggest_float("max_features", 0.1, 1.0)    
+    min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
+    min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
+    
+    cv = GroupKFold(n_splits=n_splits)
+
+    # Create model with suggested hyperparameters
+    clf = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        max_features=max_features,        
+        min_samples_split=min_samples_split,
+        min_samples_leaf=min_samples_leaf,
+        n_jobs=-1,
+        verbose=1
+    )
+    
+    # Evaluate using K-Fold cross-validation
+    score = cross_val_score(
+        clf,
+        X_train,
+        y_train,
+        cv=cv,
+        groups=m_train,
+        scoring="accuracy").mean()
+    
+    # Optuna tries to maximize accuracy
+    return score
+
+def generate_oof_predictions(
+        expert_PI,
+        expert_M,
+        X_PI,
+        X_M,
+        y,
+        groups,
+        n_splits=5,
+        random_state=42
+    ):
+    """
+    Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
+    using grouped cross-validation.
+    """
+    gkf = GroupKFold(n_splits=n_splits)
+
+    n_samples = X_PI.shape[0]
+    n_classes = len(np.unique(y))
+
+    # Allocate OOF prediction matrices
+    p_PI_oof = np.zeros((n_samples, n_classes))
+    p_M_oof = np.zeros((n_samples, n_classes))
+
+    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
+        print(f"Fold {fold+1}/{n_splits}")
+
+        # Split data
+        X_PI_train, X_PI_val = X_PI[train_idx], X_PI[val_idx]
+        X_M_train, X_M_val = X_M[train_idx], X_M[val_idx]
+        y_train = y[train_idx]
+
+        # --- Train expert PI ---
+        expert_PI.fit(X_PI_train, y_train)
+
+        # Predict on validation fold
+        p_PI_oof[val_idx] = expert_PI.predict_proba(X_PI_val)
+
+        # --- Train expert M ---
+        expert_M.fit(X_M_train, y_train)
+
+        # Predict on validation fold
+        p_M_oof[val_idx] = expert_M.predict_proba(X_M_val)
+
+    return p_PI_oof, p_M_oof
+
+def build_gate_router(expert_PI, expert_M, X_PI, X_M, y, m):
+    p_PI_val, p_M_val = generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, m)
+
+    #p_PI_val = expert_PI.predict_proba(X_PI)
+    #p_M_val = expert_M.predict_proba(X_M)
 
     # Per-sample correctness
     correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
@@ -317,16 +402,32 @@ for loop in range(args.loops):
     y_train, y_validation, y_test,
     m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
 
-    print("🟢 Train expert model PI")
-    expert_PI = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH, 
-        max_features= MAX_FEATURES,                
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1            
-    )
+    print("🟢 Get best hyperparameters model PI")
+    study_PI = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_PI")
+
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial_PI = study_PI.best_trial
+
+    print(f"Accuracy PI: {trial_PI.value}")
+    print("Best hyperparameters PI: ")
+    for key, value in trial_PI.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters PI")
+    best_params_PI = trial_PI.params
+    expert_PI = RandomForestClassifier(**best_params_PI, n_jobs=-1)
+
+    # print("🟢 Train expert model PI")
+    # expert_PI = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH, 
+    #     max_features= MAX_FEATURES,                
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1            
+    # )
 
     expert_PI.fit(X_train_PI, y_train)
 
@@ -336,16 +437,32 @@ for loop in range(args.loops):
     acc_score_val_PI = accuracy_score(y_validation, y_validation_pred_PI)
     f1_score_val_PI = f1_score(y_validation, y_validation_pred_PI, average='macro') 
 
-    print("🟢 Train expert model M")
-    expert_M = RandomForestClassifier(        
-        n_estimators=N_ESTIMATORS,                     
-        max_depth=MAX_DEPTH, 
-        max_features= MAX_FEATURES,                
-        min_samples_split=MIN_SAMPLES_SPLIT,        
-        min_samples_leaf=MIN_SAMPLES_LEAF,
-        n_jobs=-1,
-        verbose=1        
-    )
+    print("🟢 Get best hyperparameters model M")
+    study_M = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_M")
+
+    study_M.optimize(lambda trial: objective(trial, X_train_M, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial_M = study_M.best_trial
+
+    print(f"Accuracy M: {trial_M.value}")
+    print("Best hyperparameters M: ")
+    for key, value in trial_M.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters M")
+    best_params_M = trial_M.params
+    expert_M = RandomForestClassifier(**best_params_M, n_jobs=-1)
+
+    # print("🟢 Train expert model M")
+    # expert_M = RandomForestClassifier(        
+    #     n_estimators=N_ESTIMATORS,                     
+    #     max_depth=MAX_DEPTH, 
+    #     max_features= MAX_FEATURES,                
+    #     min_samples_split=MIN_SAMPLES_SPLIT,        
+    #     min_samples_leaf=MIN_SAMPLES_LEAF,
+    #     n_jobs=-1,
+    #     verbose=1        
+    # )
 
     expert_M.fit(X_train_M, y_train)
 
@@ -366,7 +483,8 @@ for loop in range(args.loops):
         expert_M, 
         np.vstack([X_train_PI, X_validation_PI]), 
         np.vstack([X_train_M, X_validation_M]),
-        np.concatenate([y_train, y_validation])
+        np.concatenate([y_train, y_validation]),
+        np.concatenate([m_train, m_validation])
     )
 
     print("🟢 Training gate")
@@ -383,7 +501,13 @@ for loop in range(args.loops):
 
     print("🟢 Test gate")
     X_gate_test = np.hstack([X_test_PI, X_test_M])
-    y_gate_test = build_gate_router(expert_PI, expert_M, X_test_PI, X_test_M, y_test)
+    y_gate_test = build_gate_router(
+        expert_PI, 
+        expert_M, 
+        X_test_PI, 
+        X_test_M, 
+        y_test,
+        m_test)
 
     gate_pred = gate.predict(X_gate_test)
 

@@ -316,7 +316,7 @@ def stack_prediction(base_model_PI, base_mode_M, X_test_PI, X_test_M):
     p_test_PI = base_model_PI.predict_proba(X_test_PI)
     p_test_M = base_mode_M.predict_proba(X_test_M)
     
-    meta_X = hstack((X_test_PI, X_test_M, p_test_PI, p_test_M))
+    meta_X = np.hstack((X_test_PI, X_test_M, p_test_PI, p_test_M))
 
     return meta_X
 

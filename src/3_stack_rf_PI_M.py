@@ -463,7 +463,7 @@ for loop in range(args.loops):
     if args.generate_plots == True:
         # create and plot confusion matrix from base model
         print("🟢 Confusion Matrix Meta model PI+M")
-        cm = confusion_matrix(y_test, model_meta.predict(X_test_meta))
+        cm = confusion_matrix(y_test, meta_model.predict(X_test_meta))
 
         plt.figure(figsize=(10, 8))
         sns.heatmap(

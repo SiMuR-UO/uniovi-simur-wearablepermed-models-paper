@@ -332,11 +332,11 @@ def generate_oof_predictions(X_PI, X_M, y, groups, n_splits=5, rf_params_PI=None
 
     return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof
 
-def stack_prediction(base_model_PI, base_mode_M, meta_model, X_test_PI, X_test_M):
-    p_PI = base_model_PI.predict_proba(X_test_PI)
-    p_M = base_mode_M.predict_proba(X_test_M)
+def stack_prediction(base_model_PI, base_mode_M, X_test_PI, X_test_M):
+    p_test_PI = base_model_PI.predict_proba(X_test_PI)
+    p_test_M = base_mode_M.predict_proba(X_test_M)
     
-    meta_X = hstack((X_test_PI, p_PI, X_test_M, p_M))
+    meta_X = hstack((X_test_PI, X_test_M, p_test_PI, p_test_M))
 
     return meta_X
 
@@ -387,75 +387,62 @@ for loop in range(args.loops):
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
-    print("🟢 Get best hyperparameters model PI")
+    print("🟢 Get best hyperparameters base model PI")
     study_PI = optuna.create_study(direction="maximize", study_name="3_stack_rf_PI")
 
     study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
     
     trial_PI = study_PI.best_trial
 
-    print(f"Accuracy PI: {trial_PI.value}")
-    print("Best hyperparameters PI: ")
+    print(f"Accuracy base model PI: {trial_PI.value}")
+    print("Best hyperparameters base model PI: ")
     for key, value in trial_PI.params.items():
         print(f"    {key}: {value}")
 
-    print("🟢 training model with best hyperparmeters PI")
+    print("🟢 Training with best hyperparmeters base model PI")
     best_params_PI = trial_PI.params
     base_model_PI = RandomForestClassifier(**best_params_PI, n_jobs=-1)
 
-    # print("🟢 Cross Training model PI")
-    # (base_model_PI,
-    #  p_X_tr_PI,
-    #  p_y_tr,
-    #  p_m_tr,
-    #  model_test_accuracy_PI,
-    #  model_test_f1_score_PI) = participant_cross_training(model_PI, X_train_PI, y_train, m_train)
-
-    print("🟢 Train model PI")
+    print("🟢 Train base model PI")
     base_model_PI.fit(X_train_PI, y_train)
 
-    print("🟢 Test model PI")
+    print("🟢 Evaluate base model PI")
     model_test_accuracy_PI = accuracy_score(y_test, base_model_PI.predict(X_test_PI))
     model_test_f1_score_PI = f1_score(y_test, base_model_PI.predict(X_test_PI), average='macro')
     
-    print("🟢 Get best hyperparameters model M")
+    print(f"Base model test Accuracy PI: {model_test_accuracy_PI}")
+    print(f"Base model test F1 Score PI: {model_test_f1_score_PI}")
+
+    print("🟢 Get best hyperparameters base model M")
     study_M = optuna.create_study(direction="maximize", study_name="3_stack_rf_M")
 
     study_M.optimize(lambda trial: objective(trial, X_train_M, y_train, m_train), n_trials=N_TRIALS)
     
     trial_M = study_M.best_trial
 
-    print(f"Accuracy M: {trial_M.value}")
-    print("Best hyperparameters M: ")
+    print(f"Accuracy base model M: {trial_M.value}")
+    print("Best hyperparameters base model M: ")
     for key, value in trial_M.params.items():
         print(f"    {key}: {value}")
 
-    print("🟢 training model with best hyperparmeters M")
+    print("🟢 Training with best hyperparmeters base model M")
     best_params_M = trial_M.params
     base_model_M = RandomForestClassifier(**best_params_M, n_jobs=-1)
 
-    # print("🟢 Cross Training model M")
-    # (base_model_M,
-    #  p_X_tr_M,
-    #  p_y_tr,
-    #  p_m_tr,
-    #  model_test_accuracy_M,
-    #  model_test_f1_score_M) = participant_cross_training(model_M, X_train_M, y_train, m_train)
-
-    print("🟢 Train model M")
+    print("🟢 Train base model M")
     base_model_M.fit(X_train_M, y_train)
 
-    print("🟢 Test model M")
+    print("🟢 Evaluate base model M")
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
 
-    print("🟢 Generate base predictions from validation PI and M folds for meta model (OOF predictions of experts)")
+    print(f"Base model test Accuracy M: {model_test_accuracy_M}")
+    print(f"Base model test F1 Score M: {model_test_f1_score_M}")
+
+    print("🟢 Generate training meta predictions for meta model concatenating PI and M predictions (OOF predictions of experts)")
     X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(X_train_PI, X_train_M, y_train, m_train, n_splits=3, rf_params_PI=best_params_PI, rf_params_M=best_params_M)
 
-    print("🟢 Get correlation between PI and M Probabilistics Distributions")
-    print("Correlation of the first column in the Probabilistics Distribution: " + str(np.corrcoef(p_X_tr_PI[:,1], p_X_tr_M[:,1])))
-
-    print("🟢 Base predictions on training for PI and M")
+    print("🟢 Training meta dataset")
     stack_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Training meta model")
@@ -471,29 +458,14 @@ for loop in range(args.loops):
     print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
     meta_model.fit(stack_X_tr, y_train)
 
-    # print("🟢 Train meta model (Random Forest with fix hyperparameters) with concatenated probability distribution from PI and M")
-    # meta_model = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH,
-    #     max_features= MAX_FEATURES,                 
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1   
-    # )
+    print("🟢 Evaluate meta model on hold out dataset")
+    X_test_meta = stack_prediction(base_model_PI, base_model_M, X_test_PI, X_test_M)
 
-    # meta_model.fit(stack_X_tr, p_y_tr)
+    meta_model_test_accuracy = accuracy_score(y_test, meta_model.predict(X_test_meta))
+    meta_model_test_f1_score = f1_score(y_test, meta_model.predict(X_test_meta), average='macro')
 
-    print("🟢 Test meta model")
-    stack_X_te = stack_prediction(base_model_PI, base_model_M, meta_model, X_test_PI, X_test_M)
-
-    # pa_te_PI = base_model_PI.predict_proba(X_test_PI)
-    # pb_te_M = base_model_M.predict_proba(X_test_M)
-    
-    # stack_X_te = np.hstack([pa_te_PI, pb_te_M])
-
-    meta_model_test_accuracy = accuracy_score(y_test, meta_model.predict(stack_X_te))
-    meta_model_test_f1_score = f1_score(y_test, meta_model.predict(stack_X_te), average='macro')
+    print(f"Meta model test Accuracy: {meta_model_test_accuracy}")
+    print(f"Meta model test F1 Score: {meta_model_test_f1_score}")
 
     # save meta model metrics
     metric["loop"] = loop
@@ -511,7 +483,7 @@ for loop in range(args.loops):
     if args.generate_plots == True:
         # create and plot confusion matrix from base model
         print("🟢 Confusion Matrix Meta model PI+M")
-        cm = confusion_matrix(y_test, model_meta.predict(stack_X_te))
+        cm = confusion_matrix(y_test, model_meta.predict(X_test_meta))
 
         plt.figure(figsize=(10, 8))
         sns.heatmap(

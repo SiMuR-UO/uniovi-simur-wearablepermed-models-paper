@@ -165,7 +165,7 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, test_size=0.2):
+def participant_concatenated(X_data, y_data, m_data, test_size=0.2):
     gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
     train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
@@ -249,8 +249,8 @@ for loop in range(args.loops):
 
     metric = {}
 
-    print("🟢 Split dataset PI+M")
-    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
+    print("🟢 Concatenated dataset PI+M")
+    (X_train, X_test, y_train, y_test, m_train, m_test) = participant_concatenated(X_data, y_data, m_data)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
     print("🟢 Get best hyperparameters concatenated model")

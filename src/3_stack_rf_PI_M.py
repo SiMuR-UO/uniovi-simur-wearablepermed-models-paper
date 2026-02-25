@@ -282,11 +282,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(X_PI, X_M, y, groups, n_splits=5, rf_params_PI=None, rf_params_M=None, random_state=42):
-    """
-    Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
-    using grouped cross-validation.
-    """
+def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, n_splits=5):
     gkf = GroupKFold(n_splits=n_splits)
 
     n_samples = X_PI.shape[0]
@@ -306,27 +302,11 @@ def generate_oof_predictions(X_PI, X_M, y, groups, n_splits=5, rf_params_PI=None
         X_M_train, X_M_val = X_M[train_idx], X_M[val_idx]
         y_train = y[train_idx]
 
-        # --- Train expert PI ---
-        base_model_PI = RandomForestClassifier(
-            random_state=random_state,
-            n_jobs=-1,
-            **rf_params_PI
-        )
-        base_model_PI.fit(X_PI_train, y_train)
-
-        # Predict on validation fold
+        # Predict on validation fold PI
         X_PI_oof[val_idx] = X_PI_val
         p_PI_oof[val_idx] = base_model_PI.predict_proba(X_PI_val)
 
-        # --- Train expert M ---
-        base_model_M = RandomForestClassifier(
-            random_state=random_state,
-            n_jobs=-1,
-            **rf_params_M
-        )
-        base_model_M.fit(X_M_train, y_train)
-
-        # Predict on validation fold
+        # Predict on validation fold M
         X_M_oof[val_idx] = X_M_val
         p_M_oof[val_idx] = base_model_M.predict_proba(X_M_val)
 
@@ -440,7 +420,7 @@ for loop in range(args.loops):
     print(f"Base model test F1 Score M: {model_test_f1_score_M}")
 
     print("🟢 Generate training meta predictions for meta model concatenating PI and M predictions (OOF predictions of experts)")
-    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(X_train_PI, X_train_M, y_train, m_train, n_splits=3, rf_params_PI=best_params_PI, rf_params_M=best_params_M)
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(base_model_PI, base_model_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
 
     print("🟢 Training meta dataset")
     stack_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])

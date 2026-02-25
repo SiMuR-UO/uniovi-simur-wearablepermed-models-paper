@@ -247,20 +247,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(
-        expert_PI,
-        expert_M,
-        X_PI,
-        X_M,
-        y,
-        groups,
-        n_splits=5,
-        random_state=42
-    ):
-    """
-    Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
-    using grouped cross-validation.
-    """
+def generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, groups, n_splits=5):
     gkf = GroupKFold(n_splits=n_splits)
 
     n_samples = X_PI.shape[0]

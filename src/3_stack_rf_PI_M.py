@@ -192,7 +192,7 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     print(f"Unique participants in train: {np.unique(m_train)}")
     print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    # split concatate dataset between PI and M
+    # split concatenated dataset between PI and M
     X_train_M = X_train[:, :91]
     X_train_PI = X_train[:, 91:]
 
@@ -282,16 +282,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(
-        X_PI,
-        X_M,
-        y,
-        groups,
-        n_splits=5,
-        rf_params_PI=None,
-        rf_params_M=None,
-        random_state=42
-    ):
+def generate_oof_predictions(X_PI, X_M, y, groups, n_splits=5, rf_params_PI=None, rf_params_M=None, random_state=42):
     """
     Generate Out-Of-Fold predictions for two RandomForest experts (PI and M)
     using grouped cross-validation.
@@ -302,7 +293,9 @@ def generate_oof_predictions(
     n_classes = len(np.unique(y))
 
     # Allocate OOF prediction matrices
+    X_PI_oof = np.zeros(X_PI.shape)
     p_PI_oof = np.zeros((n_samples, n_classes))
+    X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
 
     for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
@@ -314,28 +307,38 @@ def generate_oof_predictions(
         y_train = y[train_idx]
 
         # --- Train expert PI ---
-        expert_PI = RandomForestClassifier(
+        base_model_PI = RandomForestClassifier(
             random_state=random_state,
             n_jobs=-1,
             **rf_params_PI
         )
-        expert_PI.fit(X_PI_train, y_train)
+        base_model_PI.fit(X_PI_train, y_train)
 
         # Predict on validation fold
-        p_PI_oof[val_idx] = expert_PI.predict_proba(X_PI_val)
+        X_PI_oof[val_idx] = X_PI_val
+        p_PI_oof[val_idx] = base_model_PI.predict_proba(X_PI_val)
 
         # --- Train expert M ---
-        expert_M = RandomForestClassifier(
+        base_model_M = RandomForestClassifier(
             random_state=random_state,
             n_jobs=-1,
             **rf_params_M
         )
-        expert_M.fit(X_M_train, y_train)
+        base_model_M.fit(X_M_train, y_train)
 
         # Predict on validation fold
-        p_M_oof[val_idx] = expert_M.predict_proba(X_M_val)
+        X_M_oof[val_idx] = X_M_val
+        p_M_oof[val_idx] = base_model_M.predict_proba(X_M_val)
 
-    return p_PI_oof, p_M_oof
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof
+
+def stack_prediction(base_model_PI, base_mode_M, meta_model, X_test_PI, X_test_M):
+    p_PI = base_model_PI.predict_proba(X_test_PI)
+    p_M = base_mode_M.predict_proba(X_test_M)
+    
+    meta_X = hstack((X_test_PI, p_PI, X_test_M, p_M))
+
+    return meta_X
 
 start_app = time.perf_counter()
 
@@ -446,25 +449,17 @@ for loop in range(args.loops):
     model_test_accuracy_M = accuracy_score(y_test, base_model_M.predict(X_test_M))
     model_test_f1_score_M = f1_score(y_test, base_model_M.predict(X_test_M), average='macro')
 
-    print("🟢 Generate base predictions from validation folds for PI and M (OOF predictions of experts)")
-    p_X_tr_PI, p_X_tr_M = generate_oof_predictions(
-        X_train_PI,
-        X_train_M,
-        y_train,
-        m_train,
-        n_splits=3,
-        rf_params_PI=best_params_PI,
-        rf_params_M=best_params_M
-    )
+    print("🟢 Generate base predictions from validation PI and M folds for meta model (OOF predictions of experts)")
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(X_train_PI, X_train_M, y_train, m_train, n_splits=3, rf_params_PI=best_params_PI, rf_params_M=best_params_M)
 
     print("🟢 Get correlation between PI and M Probabilistics Distributions")
     print("Correlation of the first column in the Probabilistics Distribution: " + str(np.corrcoef(p_X_tr_PI[:,1], p_X_tr_M[:,1])))
 
     print("🟢 Base predictions on training for PI and M")
-    stack_X_tr = np.hstack([p_X_tr_PI, p_X_tr_M])
+    stack_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Training meta model")
-    model_meta = Pipeline([
+    meta_model = Pipeline([
         ("scaler", StandardScaler()),
         ("clf", LogisticRegression(
             penalty="l2",
@@ -474,10 +469,10 @@ for loop in range(args.loops):
     ])
 
     print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
-    model_meta.fit(stack_X_tr, y_train)
+    meta_model.fit(stack_X_tr, y_train)
 
     # print("🟢 Train meta model (Random Forest with fix hyperparameters) with concatenated probability distribution from PI and M")
-    # model_meta = RandomForestClassifier(        
+    # meta_model = RandomForestClassifier(        
     #     n_estimators=N_ESTIMATORS,                     
     #     max_depth=MAX_DEPTH,
     #     max_features= MAX_FEATURES,                 
@@ -487,16 +482,18 @@ for loop in range(args.loops):
     #     verbose=1   
     # )
 
-    # model_meta.fit(stack_X_tr, p_y_tr)
+    # meta_model.fit(stack_X_tr, p_y_tr)
 
     print("🟢 Test meta model")
-    pa_te_PI = base_model_PI.predict_proba(X_test_PI)
-    pb_te_M = base_model_M.predict_proba(X_test_M)
-    
-    stack_X_te = np.hstack([pa_te_PI, pb_te_M])
+    stack_X_te = stack_prediction(base_model_PI, base_model_M, meta_model, X_test_PI, X_test_M)
 
-    meta_model_test_accuracy = accuracy_score(y_test, model_meta.predict(stack_X_te))
-    meta_model_test_f1_score = f1_score(y_test, model_meta.predict(stack_X_te), average='macro')
+    # pa_te_PI = base_model_PI.predict_proba(X_test_PI)
+    # pb_te_M = base_model_M.predict_proba(X_test_M)
+    
+    # stack_X_te = np.hstack([pa_te_PI, pb_te_M])
+
+    meta_model_test_accuracy = accuracy_score(y_test, meta_model.predict(stack_X_te))
+    meta_model_test_f1_score = f1_score(y_test, meta_model.predict(stack_X_te), average='macro')
 
     # save meta model metrics
     metric["loop"] = loop

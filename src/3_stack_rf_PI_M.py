@@ -336,7 +336,7 @@ def stack_prediction(base_model_PI, base_mode_M, meta_model, X_test_PI, X_test_M
     p_PI = base_model_PI.predict_proba(X_test_PI)
     p_M = base_mode_M.predict_proba(X_test_M)
     
-    meta_X = hstack((X_test_PI, p_PI, X_test_M, p_M))
+    meta_X = np.hstack((X_test_PI, p_PI, X_test_M, p_M))
 
     return meta_X
 
@@ -511,7 +511,7 @@ for loop in range(args.loops):
     if args.generate_plots == True:
         # create and plot confusion matrix from base model
         print("🟢 Confusion Matrix Meta model PI+M")
-        cm = confusion_matrix(y_test, model_meta.predict(stack_X_te))
+        cm = confusion_matrix(y_test, meta_model.predict(stack_X_te))
 
         plt.figure(figsize=(10, 8))
         sns.heatmap(

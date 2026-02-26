@@ -101,7 +101,6 @@ WINDOW_METADATA = "arr_2"
 
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
-CV = 3
 
 metrics = []
 
@@ -177,44 +176,31 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_group_split(X_data, y_data, m_data, val_size=0.2, test_size=0.2):
-    # Transporm string labels to numbers
+def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     le = LabelEncoder()
     y_data = le.fit_transform(y_data)
-     
-    gss_test = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    train_validation_idx, test_idx = next(gss_test.split(X_data, y_data, groups=m_data))
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
-    X_train_validation, X_test = X_data[train_validation_idx], X_data[test_idx]
-    y_train_validation, y_test = y_data[train_validation_idx], y_data[test_idx]
-    m_train_validation, m_test = m_data[train_validation_idx], m_data[test_idx]
+    train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
 
-    gss_val = GroupShuffleSplit(n_splits=1, test_size=(val_size / (1 - test_size)))
-
-    train_idx, val_idx = next(gss_val.split(X_train_validation, y_train_validation, groups=m_train_validation))
-
-    X_train, X_val = X_train_validation[train_idx], X_train_validation[val_idx]
-    y_train, y_val = y_train_validation[train_idx], y_train_validation[val_idx]
-    m_train, m_val = m_train_validation[train_idx], m_train_validation[val_idx]
+    X_train, X_test = X_data[train_idx], X_data[test_idx]
+    y_train, y_test = y_data[train_idx], y_data[test_idx]
+    m_train, m_test = m_data[train_idx], m_data[test_idx]
 
     print(f"Unique participants in train: {np.unique(m_train)}")
-    print(f"Unique participants in validation:  {np.unique(m_val)}")
-    print(f"Unique participants in test:  {np.unique(m_test)}")
+    print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    # Split training/validation/test for M(91), PI(91)
-    X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-    X_val_M, X_val_PI = X_val[:, :91], X_val[:, 91:]
-    X_test_M, X_test_PI = X_test[:, :91], X_test[:, 91:]
+    # split concatenated dataset between PI and M
+    X_train_M = X_train[:, :91]
+    X_train_PI = X_train[:, 91:]
+
+    X_test_M = X_test[:, :91]
+    X_test_PI = X_test[:, 91:]
     
-    return (
-        X_train_PI, X_val_PI, X_test_PI,
-        X_train_M,  X_val_M,  X_test_M,
-        y_train, y_val, y_test,
-        m_train, m_val, m_test
-    )  
+    return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
-def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
     max_depth = trial.suggest_int("max_depth", 2, 20)
@@ -254,7 +240,9 @@ def generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, groups, n_splits
     n_classes = len(np.unique(y))
 
     # Allocate OOF prediction matrices
+    X_PI_oof = np.zeros(X_PI.shape)
     p_PI_oof = np.zeros((n_samples, n_classes))
+    X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
 
     for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
@@ -269,23 +257,19 @@ def generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, groups, n_splits
         expert_PI.fit(X_PI_train, y_train)
 
         # Predict on validation fold
+        X_PI_oof[val_idx] = X_PI_val
         p_PI_oof[val_idx] = expert_PI.predict_proba(X_PI_val)
 
         # --- Train expert M ---
         expert_M.fit(X_M_train, y_train)
 
         # Predict on validation fold
+        X_M_oof[val_idx] = X_M_val
         p_M_oof[val_idx] = expert_M.predict_proba(X_M_val)
 
-    return p_PI_oof, p_M_oof
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof
 
-def build_gate_router(expert_PI, expert_M, X_PI, X_M, y, m):
-    p_PI_val, p_M_val = generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, m)
-
-    #p_PI_val = expert_PI.predict_proba(X_PI)
-    #p_M_val = expert_M.predict_proba(X_M)
-
-    # Per-sample correctness
+def build_gate_router(p_PI_val, p_M_val, y):
     correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
     correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
 
@@ -311,7 +295,7 @@ def mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M):
     p_test_M = expert_M.predict_proba(X_test_M)
 
     # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M, p_test_PI, p_test_M]))
 
     # Extract expert weights (N, 1)
     w_PI = w[:, 1].reshape(-1, 1)
@@ -326,7 +310,7 @@ def mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M):
     p_test_M = expert_M.predict_proba(X_test_M)
 
     # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M]))
+    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M, p_test_PI, p_test_M]))
 
     # Choose expert per sample (top-1)
     choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
@@ -383,11 +367,8 @@ for loop in range(args.loops):
 
     metric = {}
 
-    print("🟢 Split Dataset (Training/Validation/Test)")
-    (X_train_PI, X_validation_PI, X_test_PI,
-    X_train_M, X_validation_M, X_test_M,
-    y_train, y_validation, y_test,
-    m_train, m_validation, m_test) = participant_group_split(X_data, y_data, m_data)
+    print("🟢 Split dataset PI+M")
+    (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data)
 
     print("🟢 Get best hyperparameters model PI")
     study_PI = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_PI")
@@ -405,24 +386,14 @@ for loop in range(args.loops):
     best_params_PI = trial_PI.params
     expert_PI = RandomForestClassifier(**best_params_PI, n_jobs=-1)
 
-    # print("🟢 Train expert model PI")
-    # expert_PI = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH, 
-    #     max_features= MAX_FEATURES,                
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1            
-    # )
-
     expert_PI.fit(X_train_PI, y_train)
 
     print("🟢 Test expert model PI")
-    y_validation_pred_PI = expert_PI.predict(X_validation_PI)
+    acc_score_test_PI = accuracy_score(y_test, expert_PI.predict(X_test_PI))
+    f1_score_test_PI = f1_score(y_test, expert_PI.predict(X_test_PI), average='macro') 
 
-    acc_score_val_PI = accuracy_score(y_validation, y_validation_pred_PI)
-    f1_score_val_PI = f1_score(y_validation, y_validation_pred_PI, average='macro') 
+    print(f"Expert model test Accuracy PI: {acc_score_test_PI}")
+    print(f"Expert model test F1 Score PI: {f1_score_test_PI}")
 
     print("🟢 Get best hyperparameters model M")
     study_M = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_M")
@@ -440,39 +411,21 @@ for loop in range(args.loops):
     best_params_M = trial_M.params
     expert_M = RandomForestClassifier(**best_params_M, n_jobs=-1)
 
-    # print("🟢 Train expert model M")
-    # expert_M = RandomForestClassifier(        
-    #     n_estimators=N_ESTIMATORS,                     
-    #     max_depth=MAX_DEPTH, 
-    #     max_features= MAX_FEATURES,                
-    #     min_samples_split=MIN_SAMPLES_SPLIT,        
-    #     min_samples_leaf=MIN_SAMPLES_LEAF,
-    #     n_jobs=-1,
-    #     verbose=1        
-    # )
-
     expert_M.fit(X_train_M, y_train)
 
     print("🟢 Test expert model PI")
-    y_validation_pred_M = expert_M.predict(X_validation_M)
+    acc_score_test_M = accuracy_score(y_test, expert_M.predict(X_test_M))
+    f1_score_test_M = f1_score(y_test, expert_M.predict(X_test_M), average='macro') 
 
-    acc_score_val_M = accuracy_score(y_validation, y_validation_pred_M)
-    f1_score_val_M = f1_score(y_validation, y_validation_pred_M, average='macro') 
+    print(f"Expert model test Accuracy M: {acc_score_test_M}")
+    print(f"Expert model test F1 Score M: {f1_score_test_M}")
 
-    print("🟢 Build gate validation datasets")
-    X_gate_val = np.hstack([
-        np.vstack([X_train_PI, X_validation_PI]), 
-        np.vstack([X_train_M, X_validation_M])
-    ])
-    
-    y_gate_val = build_gate_router(
-        expert_PI, 
-        expert_M, 
-        np.vstack([X_train_PI, X_validation_PI]), 
-        np.vstack([X_train_M, X_validation_M]),
-        np.concatenate([y_train, y_validation]),
-        np.concatenate([m_train, m_validation])
-    )
+    print("🟢 Training gate dataset")
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(expert_PI, expert_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
+
+    print("🟢 Training meta dataset")
+    X_gate_train = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
+    y_gate_train = build_gate_router(p_X_tr_PI, p_X_tr_M, y_train)
 
     print("🟢 Training gate")
     gate = Pipeline([
@@ -484,36 +437,18 @@ for loop in range(args.loops):
         ))
     ])
 
-    gate.fit(X_gate_val, y_gate_val)
+    gate.fit(X_gate_train, y_gate_train)
 
-    print("🟢 Test gate")
-    X_gate_test = np.hstack([X_test_PI, X_test_M])
-    y_gate_test = build_gate_router(
-        expert_PI, 
-        expert_M, 
-        X_test_PI, 
-        X_test_M, 
-        y_test,
-        m_test)
-
-    gate_pred = gate.predict(X_gate_test)
-
-    gate_acc = accuracy_score(y_gate_test, gate_pred)
-    gate_f1_weight = f1_score(y_gate_test, gate_pred, average="weighted")
-    print(f"Gate Accuracy: {gate_acc:.4f}, Gate F1-score: {gate_f1_weight:.4f}")
-
-    print("🟢 Soft Test MoE")
+    print("🟢 Test MoE Soft")
     p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
-
     y_pred_soft = p_final_soft.argmax(axis=1)
 
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
     moe_f1_weight_soft = f1_score(y_test, y_pred_soft, average="weighted")
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
-    print("🟢 Hard Test MoE")
+    print("🟢 Hard MoE Test")
     p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
-
     y_pred_hard = p_final_hard.argmax(axis=1)
 
     moe_acc_hard = accuracy_score(y_test, y_pred_hard)
@@ -523,12 +458,10 @@ for loop in range(args.loops):
     print("🟢 Add metrics")
     metric["loop"] = loop
 
-    metric["base_model_validate_accuracy_PI"] = acc_score_val_PI
-    metric["base_model_validate_f1_score_PI"] = f1_score_val_PI
-    metric["base_model_validate_accuracy_M"] = acc_score_val_M
-    metric["base_model_train_f1_score_M"] = f1_score_val_M    
-    metric["gate_acc"] = gate_acc
-    metric["gate_f1_weight"] = gate_f1_weight
+    metric["base_model_validate_accuracy_PI"] = acc_score_test_PI
+    metric["base_model_validate_f1_score_PI"] = f1_score_test_PI
+    metric["base_model_validate_accuracy_M"] = acc_score_test_M
+    metric["base_model_train_f1_score_M"] = f1_score_test_M
     metric["moe_acc_soft"] = moe_acc_soft
     metric["moe_f1_weight_soft"] = moe_f1_weight_soft
     metric["moe_acc_hard"] = moe_acc_hard

@@ -35,16 +35,16 @@ def stack_prediction(model1, model2, meta_model, X):
 X, y = make_blobs(n_samples=1000, centers=2, n_features=100, cluster_std=20)
 
 # split
-X, X_val, y, y_val = train_test_split(X, y, test_size=0.33)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
 
 # collect out of sample predictions
 data_x, data_y, knn_yhat, cart_yhat = list(), list(), list(), list()
 kfold = KFold(n_splits=10, shuffle=True)
 
-for train_ix, test_ix in kfold.split(X):
+for train_ix, test_ix in kfold.split(X_train):
 	# get data
-	train_X, test_X = X[train_ix], X[test_ix]
-	train_y, test_y = y[train_ix], y[test_ix]
+	train_X, test_X = X_train[train_ix], X_train[test_ix]
+	train_y, test_y = y_train[train_ix], y_train[test_ix]
 	data_x.extend(test_X)
 	data_y.extend(test_y)
 
@@ -63,22 +63,22 @@ for train_ix, test_ix in kfold.split(X):
 # construct meta dataset
 meta_X = create_meta_dataset(data_x, knn_yhat, cart_yhat)
 
-# fit final submodels
+# # fit final submodels
 model1 = DecisionTreeClassifier()
-model1.fit(X, y)
+model1.fit(X_train, y_train)
 model2 = KNeighborsClassifier()
-model2.fit(X, y)
+model2.fit(X_train, y_train)
 
 # construct meta classifier
 meta_model = LogisticRegression(solver='liblinear')
 meta_model.fit(meta_X, data_y)
 
 # evaluate sub models on hold out dataset
-acc1 = accuracy_score(y_val, model1.predict(X_val))
-acc2 = accuracy_score(y_val, model2.predict(X_val))
+acc1 = accuracy_score(y_test, model1.predict(X_test))
+acc2 = accuracy_score(y_test, model2.predict(X_test))
 print('Model1 Accuracy: %.3f, Model2 Accuracy: %.3f' % (acc1, acc2))
 
 # evaluate meta model on hold out dataset
-yhat = stack_prediction(model1, model2, meta_model, X_val)
-acc = accuracy_score(y_val, yhat)
+yhat = stack_prediction(model1, model2, meta_model, X_test)
+acc = accuracy_score(y_test, yhat)
 print('Meta Model Accuracy: %.3f' % (acc))

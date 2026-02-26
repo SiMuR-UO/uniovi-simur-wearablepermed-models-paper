@@ -10,7 +10,7 @@ import pandas as pd
 import optuna
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import GroupShuffleSplit, GridSearchCV, GroupKFold, cross_val_score
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -181,6 +181,10 @@ def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
 def participant_group_split(X_data, y_data, m_data, test_size=0.2):
+    # Transporm string labels to numbers
+    le = LabelEncoder()
+    y_data = le.fit_transform(y_data)
+
     gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
     train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
@@ -201,55 +205,7 @@ def participant_group_split(X_data, y_data, m_data, test_size=0.2):
     
     return X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
 
-def participant_cross_training(model, X_data, y_data, m_data, n_folds=3):
-    gkf = GroupKFold(n_splits=n_folds)
-
-    X_proba_all = []
-    y_proba_all = []
-    m_proba_all = []
-
-    model_acc_scores = []
-    model_f1_scores = []
-
-    for fold, (train_idx, test_idx) in enumerate(gkf.split(X_data, y_data, m_data), start=1):
-        X_train, X_test = X_data[train_idx], X_data[test_idx]
-        y_train, y_test = y_data[train_idx], y_data[test_idx]
-        m_train, m_test = m_data[train_idx], m_data[test_idx]
-
-        print(f"\n=== Fold {fold} ===")
-        print("Train groups:", np.unique(m_train))
-        print("Test groups: ", np.unique(m_test))
-
-        # train
-        model.fit(X_train, y_train)
-
-        # Predict
-        y_pred = model.predict(X_test)
-        y_proba_all.append(y_test)
-        m_proba_all.append(m_test)
-
-        # Predict probabilistic distribution
-        X_proba = model.predict_proba(X_test)
-        X_proba_all.append(X_proba)
-
-        # test
-        model_acc_scores.append(accuracy_score(y_test, y_pred))
-        model_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
-
-    # Concatenate across folds
-    X_proba_all = np.concatenate(X_proba_all, axis=0)
-    y_proba_all = np.concatenate(y_proba_all, axis=0)
-    m_proba_all = np.concatenate(m_proba_all, axis=0)
-
-    model_acc_score_mean = float(np.mean(model_acc_scores))
-    model_f1_score_mean = float(np.mean(model_f1_scores))
-
-    # train the model
-    model.fit(X_data, y_data)
-
-    return model, X_proba_all, y_proba_all, m_proba_all, model_acc_score_mean, model_f1_score_mean
-
-def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
     max_depth = trial.suggest_int("max_depth", 2, 20)
@@ -293,24 +249,32 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
     p_PI_oof = np.zeros((n_samples, n_classes))
     X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
+    y_oof = np.zeros((n_samples, ))
 
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
+    for fold, (fold_train_idx, fold_test_idx) in enumerate(gkf.split(X_PI, y, groups)):
         print(f"Fold {fold+1}/{n_splits}")
 
         # Split data
-        X_PI_train, X_PI_val = X_PI[train_idx], X_PI[val_idx]
-        X_M_train, X_M_val = X_M[train_idx], X_M[val_idx]
-        y_train = y[train_idx]
+        X_PI_train, X_PI_test = X_PI[fold_train_idx], X_PI[fold_test_idx]
+        X_M_train, X_M_test = X_M[fold_train_idx], X_M[fold_test_idx]
+        y_train, y_test = y[fold_train_idx], y[fold_test_idx]
 
-        # Predict on validation fold PI
-        X_PI_oof[val_idx] = X_PI_val
-        p_PI_oof[val_idx] = base_model_PI.predict_proba(X_PI_val)
+        # Predict on validation on fold for PI
+        base_model_PI.fit(X_PI_train, y_train)
 
-        # Predict on validation fold M
-        X_M_oof[val_idx] = X_M_val
-        p_M_oof[val_idx] = base_model_M.predict_proba(X_M_val)
+        X_PI_oof[fold_test_idx] = X_PI_test
+        p_PI_oof[fold_test_idx] = base_model_PI.predict_proba(X_PI_test)        
 
-    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof
+        # Predict on validation on fold for M
+        base_model_M.fit(X_M_train, y_train)
+
+        X_M_oof[fold_test_idx] = X_M_test
+        p_M_oof[fold_test_idx] = base_model_M.predict_proba(X_M_test)        
+
+        # Label predict on fold
+        y_oof[fold_test_idx] = y_test
+
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, y_oof
 
 def stack_prediction(base_model_PI, base_mode_M, X_test_PI, X_test_M):
     p_test_PI = base_model_PI.predict_proba(X_test_PI)
@@ -420,10 +384,10 @@ for loop in range(args.loops):
     print(f"Base model test F1 Score M: {model_test_f1_score_M}")
 
     print("🟢 Generate training meta predictions for meta model concatenating PI and M predictions (OOF predictions of experts)")
-    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(base_model_PI, base_model_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, y_tr = generate_oof_predictions(base_model_PI, base_model_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
 
     print("🟢 Training meta dataset")
-    stack_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
+    meta_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
 
     print("🟢 Training meta model")
     meta_model = Pipeline([
@@ -436,7 +400,7 @@ for loop in range(args.loops):
     ])
 
     print("🟢 Train meta model (Logistic Regression optimized hyperparameters) with concatenated probability distribution from PI and M")
-    meta_model.fit(stack_X_tr, y_train)
+    meta_model.fit(meta_X_tr, y_tr)
 
     print("🟢 Evaluate meta model on hold out dataset")
     X_test_meta = stack_prediction(base_model_PI, base_model_M, X_test_PI, X_test_M)

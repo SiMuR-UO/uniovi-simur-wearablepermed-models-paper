@@ -91,7 +91,6 @@ WINDOW_METADATA = "arr_2"
 
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
-CV = 3
 
 metrics = []
 
@@ -179,7 +178,7 @@ def participant_concatenated(X_data, y_data, m_data, test_size=0.2):
 
     return X_train, X_test, y_train, y_test, m_train, m_test
 
-def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS, cv=CV):
+def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
     max_depth = trial.suggest_int("max_depth", 2, 20)

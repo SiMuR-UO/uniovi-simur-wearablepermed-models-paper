@@ -233,7 +233,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, groups, n_splits=5):
+def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, n_splits=5):
     gkf = GroupKFold(n_splits=n_splits)
 
     n_samples = X_PI.shape[0]
@@ -244,30 +244,32 @@ def generate_oof_predictions(expert_PI, expert_M, X_PI, X_M, y, groups, n_splits
     p_PI_oof = np.zeros((n_samples, n_classes))
     X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
+    y_oof = np.zeros((n_samples, ))
 
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(X_PI, y, groups)):
+    for fold, (fold_train_idx, fold_test_idx) in enumerate(gkf.split(X_PI, y, groups)):
         print(f"Fold {fold+1}/{n_splits}")
 
         # Split data
-        X_PI_train, X_PI_val = X_PI[train_idx], X_PI[val_idx]
-        X_M_train, X_M_val = X_M[train_idx], X_M[val_idx]
-        y_train = y[train_idx]
+        X_PI_train, X_PI_test = X_PI[fold_train_idx], X_PI[fold_test_idx]
+        X_M_train, X_M_test = X_M[fold_train_idx], X_M[fold_test_idx]
+        y_train, y_test = y[fold_train_idx], y[fold_test_idx]
 
-        # --- Train expert PI ---
-        expert_PI.fit(X_PI_train, y_train)
+        # Predict on validation on fold for PI
+        base_model_PI.fit(X_PI_train, y_train)
 
-        # Predict on validation fold
-        X_PI_oof[val_idx] = X_PI_val
-        p_PI_oof[val_idx] = expert_PI.predict_proba(X_PI_val)
+        X_PI_oof[fold_test_idx] = X_PI_test
+        p_PI_oof[fold_test_idx] = base_model_PI.predict_proba(X_PI_test)        
 
-        # --- Train expert M ---
-        expert_M.fit(X_M_train, y_train)
+        # Predict on validation on fold for M
+        base_model_M.fit(X_M_train, y_train)
 
-        # Predict on validation fold
-        X_M_oof[val_idx] = X_M_val
-        p_M_oof[val_idx] = expert_M.predict_proba(X_M_val)
+        X_M_oof[fold_test_idx] = X_M_test
+        p_M_oof[fold_test_idx] = base_model_M.predict_proba(X_M_test)        
 
-    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof
+        # Label predict on fold
+        y_oof[fold_test_idx] = y_test
+
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, y_oof
 
 def build_gate_router(p_PI_val, p_M_val, y):
     correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
@@ -373,7 +375,7 @@ for loop in range(args.loops):
     print("🟢 Get best hyperparameters model PI")
     study_PI = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_PI")
 
-    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    study_PI.optimize(lambda trial: objective(trial, X_train_PI, y_train, m_train), n_trials=N_TRIALS)
     
     trial_PI = study_PI.best_trial
 
@@ -421,11 +423,11 @@ for loop in range(args.loops):
     print(f"Expert model test F1 Score M: {f1_score_test_M}")
 
     print("🟢 Training gate dataset")
-    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M = generate_oof_predictions(expert_PI, expert_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, y_tr = generate_oof_predictions(expert_PI, expert_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
 
     print("🟢 Training meta dataset")
     X_gate_train = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
-    y_gate_train = build_gate_router(p_X_tr_PI, p_X_tr_M, y_train)
+    y_gate_train = build_gate_router(p_X_tr_PI, p_X_tr_M, y_tr)
 
     print("🟢 Training gate")
     gate = Pipeline([

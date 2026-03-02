@@ -19,6 +19,7 @@
 
             // 0-Plot Whisker/box chart for all classifiers: 0_plot_whisker_box_all.py
             // 0-Plot Whisker/box Grouped chart for all classifiers: 0_plot_whisker_box_grouped.py
+            // 0-Plot Whisker/box Grouped desyncronization chart for 8 classifiers and stacking random forest model: 0_plot_whisker_box_grouped_desync.py
 
             // 1-Individual Random Forest classifier model: 2_individual_rf.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

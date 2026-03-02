@@ -31,7 +31,8 @@
 
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",
+            "--stack-all", "./datasets/data_feature_all_desync_3s.npz",
+            "--superclases", "Captured24",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

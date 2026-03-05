@@ -21,19 +21,20 @@
             // 0-Plot Whisker/box Grouped chart for all classifiers: 0_plot_whisker_box_grouped.py
             // 0-Plot Whisker/box Grouped desyncronization chart for 8 classifiers and stacking random forest model: 0_plot_whisker_box_grouped_desync.py
 
-            // 1-Individual Random Forest classifier model: 2_individual_rf.py
+            // 1-Individual Random Forest classifier model: 1_individual_rf.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--segment-body", "PI",
             //"--superclases", "Captured24",
 
-            // 2-Cascading Datasets and one Random Forest classifier model: 1_cascading_rf_PI_M.py
-            //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",
+            // 2-Concatenated Datasets and one Random Forest classifier model: 2_concatenate_rf_PI_M.py
+            //"--stack-all", "./datasets/X_y_m_final.npz",                             
+            "--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
+            "--superclases", "Captured24",
+            "--loops", "3",
 
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
-            "--stack-all", "./datasets/data_feature_all_desync_3s.npz",
-            "--superclases", "Captured24",
+            //"--superclases", "Captured24",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

@@ -1,8 +1,8 @@
 import numpy as np
 
 print("🟢 load stack PI and M")
-stack_data_PI = np.load("/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI/Modelo_BRF_8superclases_PI/data_feature_all.npz")
-stack_data_M = np.load("/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_M/Modelo_BRF_8superclases_M/data_feature_all.npz")
+stack_data_PI = np.load("/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_PI/case_PI_BRF_acc_gyr_15_classes/data_feature_all.npz")
+stack_data_M = np.load("/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models/output/cases_dataset_M/case_M_BRF_acc_gyr_15_classes/data_feature_all.npz")
 
 # get datasets from stack
 X_data_PI = stack_data_PI["arr_0"]

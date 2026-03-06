@@ -4,16 +4,16 @@ import matplotlib.pyplot as plt
 
 print("🟢 Read f1_score desync dataframe for each model and classes")
 stacking_rf_8_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics.csv')
-stacking_rf_8_desync_1s_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics_desync_1s.csv')
 stacking_rf_8_desync_3s_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics_desync_3s.csv')
 stacking_rf_8_desync_5s_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics_desync_5s.csv')
+stacking_rf_8_desync_8s_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics_desync_8s.csv')
 
 print("🟢 Create f1_score desync dataframes from stacking random forest with 8 classes")
 df_f1_scores = pd.DataFrame({
     "stacking_rf": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
-    "stacking_rf_desync_1s": stacking_rf_8_desync_1s_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "stacking_rf_desync_3s": stacking_rf_8_desync_3s_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "stacking_rf_desync_5s": stacking_rf_8_desync_5s_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
+    "stacking_rf_desync_8s": stacking_rf_8_desync_8s_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),    
 })
 
 print("🟢 Save f1_score desync dataframe metrics and mean ± std")

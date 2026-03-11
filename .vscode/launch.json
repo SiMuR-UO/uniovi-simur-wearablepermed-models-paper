@@ -34,7 +34,7 @@
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
-            "--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_desync_8s/data_feature_all.npz",
+            "--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_desync_1s/data_feature_all.npz",
             "--superclases", "Captured24",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py

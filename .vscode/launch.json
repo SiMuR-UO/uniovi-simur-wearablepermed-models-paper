@@ -31,25 +31,26 @@
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
             //"--superclases", "Captured24",
 
-            // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 2_stack_rf_PI_M.py
+            // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 3_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
-            "--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_desync_1s/data_feature_all.npz",
-            "--superclases", "Captured24",
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_desync_1s/data_feature_all.npz",
+            //"--superclases", "Captured24",
             
-            // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 2_stack_ae_PI_M.py
+            // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 3_stack_ae_PI_M.py
+            //"--stack-all", "./datasets/X_y_m_final.npz",
+            "--stack-all", "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models-paper/datasets/data_feature_all.npz",
+            "--superclases", "CPA-METS",
+
+            // 4-MoE with two Random Forest experts and one Logistic Regression Gate: 4_mixture_of_experts_rf_PI_M.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
 
-            // 4-MoE with two Random Forest experts and one Logistic Regression Gate: 3_mixture_of_experts_rf_PI_M.py 
+            // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_ae_PI_M.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
 
-            // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_ae_PI_M.py 
-            //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--superclases", "Captured24",
-
-            // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 3_mixture_of_experts_vae_PI_M.py
+            // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_vae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--superclases", "Captured24",
           ],

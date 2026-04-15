@@ -296,7 +296,7 @@ best = ranked_models.iloc[0]
 print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
 print("\n")
 
-print("🟢 Coefficient of Variation (CV)")
+print("🟢 Weighted Ranking: Sharpe-like ratio like: Coefficient of Variation (CV) with Stability Score")
 table_whisker_box_compare = table_whisker_box
 
 def extract_stats(val):
@@ -305,43 +305,24 @@ def extract_stats(val):
 
 table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: pd.Series(extract_stats(x)))
 
-# 3. Calculate Sharpe-like ratio:   Coefficient of Variation (CV) %
-# (Lower is more consistent)
+# 3. Calculate Sharpe-like ratio: Coefficient of Variation (CV) - (Lower is more consistent)
 table_whisker_box_compare['cv_percent'] = (table_whisker_box_compare['std'] / table_whisker_box_compare['mean']) * 100
 
-# 4. Calculate Stability Score (Mean - Std)
-# (Higher is better, represents the "safe" performance floor)
+# 4. Calculate Stability Score (Mean - Std) - (Higher is better, represents the "safe" performance floor)
 table_whisker_box_compare['stability_score'] = table_whisker_box_compare['mean'] - table_whisker_box_compare['std']
 
-# 5. Rank by Stability Score (Conservative choice)
-ranked_models = table_whisker_box_compare.sort_values(by='stability_score', ascending=False)
+# 1. Normalize the metrics so they are on the same scale (0 to 1)
+# For Stability: Higher is better
+table_whisker_box_compare['norm_stability'] = (table_whisker_box_compare['stability_score'] - table_whisker_box_compare['stability_score'].min()) / (table_whisker_box_compare['stability_score'].max() - table_whisker_box_compare['stability_score'].min())
 
-print("--- Top 5 Performing Models ---")
-print(ranked_models[['fusion_strategy', 'granularity', 'f1_score_percent']].head(5))
+# For CV: Lower is better (so we subtract from 1)
+table_whisker_box_compare['norm_consistency'] = 1 - (table_whisker_box_compare['cv_percent'] - table_whisker_box_compare['cv_percent'].min()) / (table_whisker_box_compare['cv_percent'].max() - table_whisker_box_compare['cv_percent'].min())
 
-best = ranked_models.iloc[0]
-print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
-print("\n")
+# 2. Create a Final Score (e.g., 70% weight on stability, 30% on consistency)
+table_whisker_box_compare['final_rank_score'] = (table_whisker_box_compare['norm_stability'] * 0.7) + (table_whisker_box_compare['norm_consistency'] * 0.3)
 
-print("🟢 Coefficient of Variation (CV) and a Stability Score Ranking")
-table_whisker_box_compare = table_whisker_box
-
-def extract_stats(val):
-    parts = val.split(' ± ')
-    return float(parts[0]), float(parts[1])
-
-table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: pd.Series(extract_stats(x)))
-
-# 3. Calculate Sharpe-like ratio:   Coefficient of Variation (CV) %
-# (Lower is more consistent)
-table_whisker_box_compare['cv_percent'] = (table_whisker_box_compare['std'] / table_whisker_box_compare['mean']) * 100
-
-# 4. Calculate Stability Score (Mean - Std)
-# (Higher is better, represents the "safe" performance floor)
-table_whisker_box_compare['stability_score'] = table_whisker_box_compare['mean'] - table_whisker_box_compare['std']
-
-# 5. Rank by Stability Score (Conservative choice)
-ranked_models = table_whisker_box_compare.sort_values(by='stability_score', ascending=False)
+# 3. Now the ranking uses EVERYTHING you calculated
+table_whisker_box_compare = table_whisker_box_compare.sort_values(by='final_rank_score', ascending=False)
 
 print("--- Top 5 Performing Models ---")
 print(ranked_models[['fusion_strategy', 'granularity', 'f1_score_percent']].head(5))

@@ -6,9 +6,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import optuna
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_val_score
-from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold, LeaveOneGroupOut, cross_val_score
 from sklearn.metrics import accuracy_score, f1_score
 
 ACTIVITIES = sorted(['FASE REPOSO CON K5', 'TAPIZ RODANTE',
@@ -105,7 +104,7 @@ def parse_args(args):
     Returns:
       :obj:`argparse.Namespace`: command line parameters namespace
     """
-    parser = argparse.ArgumentParser(description="Cascading Random Forest Model")
+    parser = argparse.ArgumentParser(description="Individual Random Forest Model")
     parser.add_argument(
         "-stack-all",
         "--stack-all",
@@ -118,7 +117,14 @@ def parse_args(args):
         "--superclases",
         dest="superclases",    
         help=f"Use Superclases: WearablePerMed, Captured24, CPA-METS"
-    )       
+    )
+    parser.add_argument(
+        "-segment-body",
+        "--segment-body",
+        required=True,
+        dest="segment_body",    
+        help=f"Segment Body: PI, M"
+    )           
     parser.add_argument(
         "-loops",
         "--loops",
@@ -165,7 +171,7 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_concatenated(X_data, y_data, m_data, test_size=0.2):
+def participant_group_split(X_data, y_data, m_data, segment_body, test_size=0.2):
     gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
 
     train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
@@ -177,9 +183,21 @@ def participant_concatenated(X_data, y_data, m_data, test_size=0.2):
     print(f"Unique participants in train: {np.unique(m_train)}")
     print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
 
-    return X_train, X_test, y_train, y_test, m_train, m_test
+    # split concatate dataset between PI and M
+    X_train_M = X_train[:, :91]
+    X_train_PI = X_train[:, 91:]
 
-def participant_loocv_iterator(X_data, y_data, m_data):
+    X_test_M = X_test[:, :91]
+    X_test_PI = X_test[:, 91:]
+    
+    if segment_body == 'PI':
+        return X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
+    elif segment_body == 'M':
+        return X_train_M, X_test_M, y_train, y_test, m_train, m_test
+    else:
+        raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
+
+def participant_loocv_iterator(X_data, y_data, m_data, segment_body):
     logo = LeaveOneGroupOut()
 
     for train_idx, test_idx in logo.split(X_data, y_data, m_data):
@@ -194,8 +212,20 @@ def participant_loocv_iterator(X_data, y_data, m_data):
         print(f"Left out participant: {left_out_participant}")
         print(f"Training on {len(np.unique(m_train))} other participants")
 
-        yield X_train, X_test, y_train, y_test, m_train, m_test
+        # split concatate dataset between PI and M
+        X_train_M = X_train[:, :91]
+        X_train_PI = X_train[:, 91:]
 
+        X_test_M = X_test[:, :91]
+        X_test_PI = X_test[:, 91:]
+
+        if segment_body == 'PI':
+            yield X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
+        elif segment_body == 'M':
+            yield X_train_M, X_test_M, y_train, y_test, m_train, m_test
+        else:
+            raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
+            
 def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)
@@ -260,8 +290,8 @@ elif (args.superclases == "CPA-METS"):
 participant_ids = np.sort(np.unique(m_data))
 print("Total participants:", len(participant_ids))
 
-print("? Calculate PI+M LOOCV(Leave-One-Out)")
-data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
+print("Calculate PI+M LOOCV(Leave-One-Out)")
+data_iterator = participant_loocv_iterator(X_data, y_data, m_data, args.segment_body)
 
 #for loop in range(args.loops):
 for loop, (X_train, X_test, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):    
@@ -270,12 +300,12 @@ for loop, (X_train, X_test, y_train, y_test, m_train, m_test) in enumerate(data_
 
     metric = {}
 
-    print("🟢 Concatenated dataset PI+M")
-    #(X_train, X_test, y_train, y_test, m_train, m_test) = participant_concatenated(X_data, y_data, m_data)
+    #print("🟢 Split dataset PI+M")
+    #(X_train, X_test, y_train, y_test, m_train, m_test) = participant_group_split(X_data, y_data, m_data, args.segment_body)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
-    print("🟢 Get best hyperparameters concatenated model")
-    study = optuna.create_study(direction="maximize", study_name="2_concatenate_rf_PI_M")
+    print("🟢 Get best hyperparameters")
+    study = optuna.create_study(direction="maximize", study_name="1_individual_rf")
 
     study.optimize(lambda trial: objective(trial, X_train, y_train, m_train), n_trials=N_TRIALS)
     
@@ -286,17 +316,15 @@ for loop, (X_train, X_test, y_train, y_test, m_train, m_test) in enumerate(data_
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
 
-    print("🟢 training model with best hyperparmeters")
+    print("🟢 training model with best hyperparmeters individual model")
     best_params = trial.params
     model = RandomForestClassifier(**best_params, n_jobs=-1)
-   
+
     model.fit(X_train, y_train)
 
     print("🟢 Validate model")
-    X_pr_model_test = model.predict(X_test)
-
-    model_accuracy_test = accuracy_score(y_test, X_pr_model_test)
-    model_f1_score_test = f1_score(y_test, X_pr_model_test, average='macro')
+    model_accuracy_test = accuracy_score(y_test, model.predict(X_test))
+    model_f1_score_test = f1_score(y_test, model.predict(X_test), average='macro')
 
     # save meta model metrics
     metric["loop"] = loop
@@ -328,7 +356,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/2_concatenate/" + get_save_path(args.superclases) + "/metrics_loocv.csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_loocv_" + args.segment_body.lower() + ".csv", index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

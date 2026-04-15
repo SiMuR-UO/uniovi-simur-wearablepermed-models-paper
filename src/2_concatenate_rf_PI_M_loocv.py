@@ -6,8 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import optuna
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold, cross_val_score
-from sklearn.model_selection import LeaveOneGroupOut
+from sklearn.model_selection import LeaveOneGroupOut, GroupKFold, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 
@@ -165,20 +164,6 @@ def superclases_captured24(y_data):
 def superclases_cpa_mets(y_data):
     return np.array([MAPPING_CPA_METS.get(label, "UNKNOWN") for label in y_data])
 
-def participant_concatenated(X_data, y_data, m_data, test_size=0.2):
-    gss = GroupShuffleSplit(n_splits=1, test_size=test_size)
-
-    train_idx, test_idx = next(gss.split(X_data, y_data, m_data))
-
-    X_train, X_test = X_data[train_idx], X_data[test_idx]
-    y_train, y_test = y_data[train_idx], y_data[test_idx]
-    m_train, m_test = m_data[train_idx], m_data[test_idx]
-
-    print(f"Unique participants in train: {np.unique(m_train)}")
-    print(f"Unique participants in test:  {np.unique(m_data[test_idx])}")
-
-    return X_train, X_test, y_train, y_test, m_train, m_test
-
 def participant_loocv_iterator(X_data, y_data, m_data):
     logo = LeaveOneGroupOut()
 
@@ -260,10 +245,9 @@ elif (args.superclases == "CPA-METS"):
 participant_ids = np.sort(np.unique(m_data))
 print("Total participants:", len(participant_ids))
 
-print("? Calculate PI+M LOOCV(Leave-One-Out)")
+print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
-#for loop in range(args.loops):
 for loop, (X_train, X_test, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):    
     start_loop = time.perf_counter()
     print("🔵 Loop: " + str(loop))
@@ -271,7 +255,6 @@ for loop, (X_train, X_test, y_train, y_test, m_train, m_test) in enumerate(data_
     metric = {}
 
     print("🟢 Concatenated dataset PI+M")
-    #(X_train, X_test, y_train, y_test, m_train, m_test) = participant_concatenated(X_data, y_data, m_data)
     print(f"X Train size: {X_train.shape}, y Train size: {y_train.shape}, X Test size: {X_test.shape}, y Test size: {y_test.shape}")
    
     print("🟢 Get best hyperparameters concatenated model")

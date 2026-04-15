@@ -1,5 +1,7 @@
 import pandas as pd
 
+METRIC_FILENAME = 'metrics_loocv.csv'
+
 print("🟢 Read f1_score dataframe for each model and classes")
 individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/metrics_pi.csv')
 individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/metrics_m.csv')
@@ -7,24 +9,24 @@ individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/metrics_pi.cs
 individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/metrics_m.csv')
 individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/metrics_pi.csv')
 individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/metrics_m.csv')
-concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/metrics.csv')
-concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/metrics.csv')
-concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/metrics.csv')
-stacking_rf_4_data = pd.read_csv('./paper/3_statcking_rf/4_classes/metrics.csv')
-stacking_rf_8_data = pd.read_csv('./paper/3_statcking_rf/8_classes/metrics.csv')
-stacking_rf_15_data = pd.read_csv('./paper/3_statcking_rf/15_classes/metrics.csv')
-stacking_ae_4_data = pd.read_csv('./paper/3_statcking_ae/4_classes/metrics.csv')
-stacking_ae_8_data = pd.read_csv('./paper/3_statcking_ae/8_classes/metrics.csv')
-stacking_ae_15_data = pd.read_csv('./paper/3_statcking_ae/15_classes/metrics.csv')
-moe_rf_4_data = pd.read_csv('./paper/4_moe_rf/4_classes/metrics.csv')
-moe_rf_8_data = pd.read_csv('./paper/4_moe_rf/8_classes/metrics.csv')
-moe_rf_15_data = pd.read_csv('./paper/4_moe_rf/15_classes/metrics.csv')
-moe_ae_4_data = pd.read_csv('./paper/4_moe_ae/4_classes/metrics.csv', decimal=",")
-moe_ae_8_data = pd.read_csv('./paper/4_moe_ae/8_classes/metrics.csv', decimal=",")
-moe_ae_15_data = pd.read_csv('./paper/4_moe_ae/15_classes/metrics.csv', decimal=",")
-moe_vae_4_data = pd.read_csv('./paper/4_moe_vae/4_classes/metrics.csv', decimal=",")
-moe_vae_8_data = pd.read_csv('./paper/4_moe_vae/8_classes/metrics.csv', decimal=",")
-moe_vae_15_data = pd.read_csv('./paper/4_moe_vae/15_classes/metrics.csv', decimal=",")
+concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/' + METRIC_FILENAME)
+concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/' + METRIC_FILENAME)
+concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/' + METRIC_FILENAME)
+stacking_rf_4_data = pd.read_csv('./paper/3_statcking_rf/4_classes/' + METRIC_FILENAME)
+stacking_rf_8_data = pd.read_csv('./paper/3_statcking_rf/8_classes/' + METRIC_FILENAME)
+stacking_rf_15_data = pd.read_csv('./paper/3_statcking_rf/15_classes/' + METRIC_FILENAME)
+stacking_ae_4_data = pd.read_csv('./paper/3_statcking_ae/4_classes/' + METRIC_FILENAME)
+stacking_ae_8_data = pd.read_csv('./paper/3_statcking_ae/8_classes/' + METRIC_FILENAME)
+stacking_ae_15_data = pd.read_csv('./paper/3_statcking_ae/15_classes/' + METRIC_FILENAME)
+moe_rf_4_data = pd.read_csv('./paper/4_moe_rf/4_classes/' + METRIC_FILENAME)
+moe_rf_8_data = pd.read_csv('./paper/4_moe_rf/8_classes/' + METRIC_FILENAME)
+moe_rf_15_data = pd.read_csv('./paper/4_moe_rf/15_classes/' + METRIC_FILENAME)
+moe_ae_4_data = pd.read_csv('./paper/4_moe_ae/4_classes/' + METRIC_FILENAME, decimal=",")
+moe_ae_8_data = pd.read_csv('./paper/4_moe_ae/8_classes/' + METRIC_FILENAME, decimal=",")
+moe_ae_15_data = pd.read_csv('./paper/4_moe_ae/15_classes/' + METRIC_FILENAME, decimal=",")
+#moe_vae_4_data = pd.read_csv('./paper/4_moe_vae/4_classes/' + METRIC_FILENAME, decimal=",")
+#moe_vae_8_data = pd.read_csv('./paper/4_moe_vae/8_classes/' + METRIC_FILENAME, decimal=",")
+#moe_vae_15_data = pd.read_csv('./paper/4_moe_vae/15_classes/' + METRIC_FILENAME, decimal=",")
 
 print("🟢 Filter and rename dataframe and get only the mean and standard deviation")
 individual_4_pi_data = individual_4_pi_data[individual_4_pi_data["loop"].isin(["mean", "std"])]
@@ -72,15 +74,15 @@ moe_ae_8_data = moe_ae_8_data.rename(columns={"moe_model_test_soft_accuracy": "m
 moe_ae_15_data = moe_ae_15_data[moe_ae_15_data["loop"].isin(["mean", "std"])]
 moe_ae_15_data = moe_ae_15_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
 moe_ae_15_data = moe_ae_15_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
-moe_vae_4_data = moe_vae_4_data[moe_vae_4_data["loop"].isin(["mean", "std"])]
-moe_vae_4_data = moe_vae_4_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
-moe_vae_4_data = moe_vae_4_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
-moe_vae_8_data = moe_vae_8_data[moe_vae_8_data["loop"].isin(["mean", "std"])]
-moe_vae_8_data = moe_vae_8_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
-moe_vae_8_data = moe_vae_8_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
-moe_vae_15_data = moe_vae_15_data[moe_vae_15_data["loop"].isin(["mean", "std"])]
-moe_vae_15_data = moe_vae_15_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
-moe_vae_15_data = moe_vae_15_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
+#moe_vae_4_data = moe_vae_4_data[moe_vae_4_data["loop"].isin(["mean", "std"])]
+#moe_vae_4_data = moe_vae_4_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
+#moe_vae_4_data = moe_vae_4_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
+#moe_vae_8_data = moe_vae_8_data[moe_vae_8_data["loop"].isin(["mean", "std"])]
+#moe_vae_8_data = moe_vae_8_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
+#moe_vae_8_data = moe_vae_8_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
+#moe_vae_15_data = moe_vae_15_data[moe_vae_15_data["loop"].isin(["mean", "std"])]
+#moe_vae_15_data = moe_vae_15_data.loc[:, ["loop", "moe_model_test_soft_accuracy", "moe_model_test_soft_f1_score"]]
+#moe_vae_15_data = moe_vae_15_data.rename(columns={"moe_model_test_soft_accuracy": "model_accuracy_test", "moe_model_test_soft_f1_score": "model_f1_score_test"})
 
 print("🟢 Transform dataframe to be concatenated")
 individual_4_pi_data = (
@@ -251,30 +253,30 @@ moe_ae_15_data = (
 )
 moe_ae_15_data.insert(1, "granularity", 15)
 moe_ae_15_data.insert(2, "fusion_strategy", "moe_ae")
-moe_vae_4_data = (
-    moe_vae_4_data.set_index("loop")   # mean/std become columns after transpose
-      .T                                     # transpose metrics to rows
-      .reset_index()
-      .rename(columns={"index": "metric"})
-)
-moe_vae_4_data.insert(1, "granularity", 4)
-moe_vae_4_data.insert(2, "fusion_strategy", "moe_vae")
-moe_vae_8_data = (
-    moe_vae_8_data.set_index("loop")   # mean/std become columns after transpose
-      .T                                     # transpose metrics to rows
-      .reset_index()
-      .rename(columns={"index": "metric"})
-)
-moe_vae_8_data.insert(1, "granularity", 8)
-moe_vae_8_data.insert(2, "fusion_strategy", "moe_vae")
-moe_vae_15_data = (
-    moe_vae_15_data.set_index("loop")   # mean/std become columns after transpose
-      .T                                     # transpose metrics to rows
-      .reset_index()
-      .rename(columns={"index": "metric"})
-)
-moe_vae_15_data.insert(1, "granularity", 15)
-moe_vae_15_data.insert(2, "fusion_strategy", "moe_vae")
+#moe_vae_4_data = (
+#    moe_vae_4_data.set_index("loop")   # mean/std become columns after transpose
+#      .T                                     # transpose metrics to rows
+#      .reset_index()
+#      .rename(columns={"index": "metric"})
+#)
+#moe_vae_4_data.insert(1, "granularity", 4)
+#moe_vae_4_data.insert(2, "fusion_strategy", "moe_vae")
+#moe_vae_8_data = (
+#    moe_vae_8_data.set_index("loop")   # mean/std become columns after transpose
+#      .T                                     # transpose metrics to rows
+#      .reset_index()
+#      .rename(columns={"index": "metric"})
+#)
+#moe_vae_8_data.insert(1, "granularity", 8)
+#moe_vae_8_data.insert(2, "fusion_strategy", "moe_vae")
+#moe_vae_15_data = (
+#    moe_vae_15_data.set_index("loop")   # mean/std become columns after transpose
+#      .T                                     # transpose metrics to rows
+#      .reset_index()
+#      .rename(columns={"index": "metric"})
+#)
+#moe_vae_15_data.insert(1, "granularity", 15)
+#moe_vae_15_data.insert(2, "fusion_strategy", "moe_vae")
 
 print("🟢 Concatenated dataframe")
 table_whisker_box = pd.concat([
@@ -299,9 +301,9 @@ table_whisker_box = pd.concat([
     moe_ae_4_data,
     moe_ae_8_data,
     moe_ae_15_data,
-    moe_vae_4_data,
-    moe_vae_8_data,
-    moe_vae_15_data
+    #moe_vae_4_data,
+    #moe_vae_8_data,
+    #moe_vae_15_data
 ], axis=0).reset_index(drop=True)
 
 # Convert mean and std to percent and round

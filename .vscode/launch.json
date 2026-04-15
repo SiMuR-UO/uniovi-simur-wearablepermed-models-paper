@@ -23,9 +23,9 @@
 
             // 1-Individual Random Forest classifier model: 1_individual_rf.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
-            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
-            //"--segment-body", "M",
-            //"--superclases", "Captured24",
+            "--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
+            "--segment-body", "M",
+            //"--superclases", "CPA-METS",
 
             // 2-Concatenated Datasets and one Random Forest classifier model: 2_concatenate_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",

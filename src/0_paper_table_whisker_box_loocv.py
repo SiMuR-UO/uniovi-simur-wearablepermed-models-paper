@@ -283,7 +283,9 @@ print(table_whisker_box)
 
 print("\n")
 
-print("🟢 F1_Score Ranking")
+print("🟢 Statistically-grounded comparisons")
+
+print("🔵 F1_Score Ranking")
 table_whisker_box_compare = table_whisker_box
 table_whisker_box_compare['f1_mean'] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: float(x.split(' ± ')[0]))
 
@@ -296,7 +298,7 @@ best = ranked_models.iloc[0]
 print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
 print("\n")
 
-print("🟢 Weighted Ranking: Sharpe-like ratio like: Coefficient of Variation (CV) with Stability Score")
+print("🔵 Weighted Ranking: Sharpe-like ratio like: Coefficient of Variation (CV) with Stability Score")
 table_whisker_box_compare = table_whisker_box
 
 def extract_stats(val):
@@ -308,7 +310,7 @@ table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score
 # 3. Calculate Sharpe-like ratio: Coefficient of Variation (CV) - (Lower is more consistent)
 table_whisker_box_compare['cv_percent'] = (table_whisker_box_compare['std'] / table_whisker_box_compare['mean']) * 100
 
-# 4. Calculate Stability Score (Mean - Std) - (Higher is better, represents the "safe" performance floor)
+# 4. Stability Score (Mean - Std) - (Higher is better, represents the "safe" performance floor)
 table_whisker_box_compare['stability_score'] = table_whisker_box_compare['mean'] - table_whisker_box_compare['std']
 
 # 1. Normalize the metrics so they are on the same scale (0 to 1)
@@ -331,7 +333,7 @@ best = ranked_models.iloc[0]
 print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
 print("\n")
 
-print("🟢 Z-Test Ranking")
+print("🔵 Z-Test Ranking")
 table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: pd.Series([float(i) for i in x.split(' ± ')]))
 
 # 2. Identify the "Champion" (Highest Mean)

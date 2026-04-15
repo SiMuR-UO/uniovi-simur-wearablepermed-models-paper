@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-METRIC_FILENAME = 'metrics.csv'
+METRIC_FILENAME = 'metrics_loocv.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
 individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/metrics_pi.csv')
@@ -26,9 +26,6 @@ moe_rf_15_data = pd.read_csv('./paper/4_moe_rf/15_classes/' + METRIC_FILENAME)
 moe_ae_4_data = pd.read_csv('./paper/4_moe_ae/4_classes/' + METRIC_FILENAME, decimal=",")
 moe_ae_8_data = pd.read_csv('./paper/4_moe_ae/8_classes/' + METRIC_FILENAME, decimal=",")
 moe_ae_15_data = pd.read_csv('./paper/4_moe_ae/15_classes/' + METRIC_FILENAME, decimal=",")
-moe_vae_4_data = pd.read_csv('./paper/4_moe_vae/4_classes/' + METRIC_FILENAME, decimal=",")
-moe_vae_8_data = pd.read_csv('./paper/4_moe_vae/8_classes/' + METRIC_FILENAME, decimal=",")
-moe_vae_15_data = pd.read_csv('./paper/4_moe_vae/15_classes/' + METRIC_FILENAME, decimal=",")
 
 print("🟢 Create f1_score dataframes grouped by classes: 4, 8, 15")
 df_4 = pd.DataFrame({
@@ -39,7 +36,6 @@ df_4 = pd.DataFrame({
     "stacking_ae": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "moe_rf": moe_rf_4_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
     "moe_ae": moe_ae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "moe_vae": moe_vae_4_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 df_8 = pd.DataFrame({
@@ -50,7 +46,6 @@ df_8 = pd.DataFrame({
     "stacking_ae": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "moe_rf": moe_rf_8_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
     "moe_ae": moe_ae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "moe_vae": moe_vae_8_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 df_15 = pd.DataFrame({
@@ -61,7 +56,6 @@ df_15 = pd.DataFrame({
     "stacking_ae": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "moe_rf": moe_rf_15_data.loc[:29,"moe_f1_weight_soft"].to_numpy().astype(float),
     "moe_ae": moe_ae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
-    "moe_vae": moe_vae_15_data.loc[:29,"moe_model_test_hard_accuracy"].to_numpy().astype(float),
 })
 
 print("🟢 Create box-and-whisker plot")
@@ -131,5 +125,5 @@ for patch, color in zip(ax_15_boxplot['boxes'], colors):
 plt.tight_layout()
 
 print("🟢 Save box-and-whisker plot")
-plt.savefig(str(Path.cwd()) + "/paper/whisker_box_plot_classes.png", dpi=300, bbox_inches="tight")
+plt.savefig(str(Path.cwd()) + "/paper/whisker_box_plot_classes_loocv.png", dpi=300, bbox_inches="tight")
 plt.show()

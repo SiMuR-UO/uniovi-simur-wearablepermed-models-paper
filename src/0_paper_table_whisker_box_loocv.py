@@ -279,3 +279,18 @@ table_whisker_box = table_whisker_box.query('metric == "model_f1_score_test"')
 
 print("🟢 Print results")
 print(table_whisker_box)
+
+print("🟢 Compare the models table and get the best one")
+# 2. Extract the numeric mean from "81.86 ± 3.06"
+table_whisker_box['f1_mean'] = table_whisker_box['f1_score_percent'].apply(lambda x: float(x.split(' ± ')[0]))
+
+# 3. Sort by the highest mean F1-score
+ranked_models = table_whisker_box.sort_values(by='f1_mean', ascending=False)
+
+# 4. Display results
+print("--- Top 5 Performing Models ---")
+print(ranked_models[['fusion_strategy', 'granularity', 'f1_score_percent']].head(5))
+
+# 5. Get the best model
+best = ranked_models.iloc[0]
+print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")

@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 METRIC_PI_FILENAME = 'metrics_loocv_pi.csv'
@@ -279,5 +280,112 @@ table_whisker_box = table_whisker_box.drop(columns=["mean", "std"])
 
 table_whisker_box = table_whisker_box.query('metric == "model_f1_score_test"')
 
-print("🟢 Print results")
+print("🟢 Table Metric Models")
 print(table_whisker_box)
+
+print("\n")
+
+print("🟢 Statistically-grounded comparisons")
+
+print("🔵 F1_Score Ranking")
+table_whisker_box_compare = table_whisker_box
+table_whisker_box_compare['f1_mean'] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: float(x.split(' ± ')[0]))
+
+ranked_models = table_whisker_box_compare.sort_values(by='f1_mean', ascending=False)
+
+print("--- Top 5 Performing Models ---")
+print(ranked_models[['fusion_strategy', 'granularity', 'f1_score_percent']].head(5))
+
+best = ranked_models.iloc[0]
+print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
+print("\n")
+
+print("🔵 Weighted Ranking: Sharpe-like ratio like: Coefficient of Variation (CV) with Stability Score")
+table_whisker_box_compare = table_whisker_box
+
+def extract_stats(val):
+    parts = val.split(' ± ')
+    return float(parts[0]), float(parts[1])
+
+table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: pd.Series(extract_stats(x)))
+
+# 3. Calculate Sharpe-like ratio: Coefficient of Variation (CV) - (Lower is more consistent)
+table_whisker_box_compare['cv_percent'] = (table_whisker_box_compare['std'] / table_whisker_box_compare['mean']) * 100
+
+# 4. Stability Score (Mean - Std) - (Higher is better, represents the "safe" performance floor)
+table_whisker_box_compare['stability_score'] = table_whisker_box_compare['mean'] - table_whisker_box_compare['std']
+
+# 1. Normalize the metrics so they are on the same scale (0 to 1)
+# For Stability: Higher is better
+table_whisker_box_compare['norm_stability'] = (table_whisker_box_compare['stability_score'] - table_whisker_box_compare['stability_score'].min()) / (table_whisker_box_compare['stability_score'].max() - table_whisker_box_compare['stability_score'].min())
+
+# For CV: Lower is better (so we subtract from 1)
+table_whisker_box_compare['norm_consistency'] = 1 - (table_whisker_box_compare['cv_percent'] - table_whisker_box_compare['cv_percent'].min()) / (table_whisker_box_compare['cv_percent'].max() - table_whisker_box_compare['cv_percent'].min())
+
+# 2. Create a Final Score (e.g., 70% weight on stability, 30% on consistency)
+table_whisker_box_compare['final_rank_score'] = (table_whisker_box_compare['norm_stability'] * 0.7) + (table_whisker_box_compare['norm_consistency'] * 0.3)
+
+# 3. Now the ranking uses EVERYTHING you calculated
+table_whisker_box_compare = table_whisker_box_compare.sort_values(by='final_rank_score', ascending=False)
+
+print("--- Top 5 Performing Models ---")
+print(ranked_models[['fusion_strategy', 'granularity', 'f1_score_percent']].head(5))
+
+best = ranked_models.iloc[0]
+print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
+print("\n")
+
+print("🔵 Z-Test Ranking")
+table_whisker_box_compare[['mean', 'std']] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: pd.Series([float(i) for i in x.split(' ± ')]))
+
+# 2. Identify the "Champion" (Highest Mean)
+table_whisker_box_compare = table_whisker_box
+
+# 2. Extract numeric Mean and Std from the string column
+table_whisker_box_compare['mean'] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: float(x.split(' ± ')[0]))
+table_whisker_box_compare['std'] = table_whisker_box_compare['f1_score_percent'].apply(lambda x: float(x.split(' ± ')[1]))
+
+# 3. Sort by mean to find the Champion
+table_whisker_box_compare = table_whisker_box_compare.sort_values('mean', ascending=False).reset_index(drop=True)
+champion = table_whisker_box_compare.iloc[0]
+
+# 4. Refactored Z-test Function (Returns ONLY a float)
+def calculate_z_score(row, champ):
+    if row.name == 0:  # This is the champion itself
+        return 0.0
+    
+    # Formula: (Mean1 - Mean2) / sqrt(std1^2 + std2^2)
+    diff = champ['mean'] - row['mean']
+    pooled_std = np.sqrt(champ['std']**2 + row['std']**2)
+    
+    return float(diff / pooled_std) if pooled_std != 0 else 0.0
+
+# 5. Apply the function to create the new column
+table_whisker_box_compare['z_score_vs_champ'] = table_whisker_box_compare.apply(
+    lambda row: calculate_z_score(row, champion), axis=1
+)
+
+# 6. Now the comparison works perfectly
+table_whisker_box_compare['is_significantly_worse'] = table_whisker_box_compare['z_score_vs_champ'] > 1.96
+
+# Display results
+#print(table_whisker_box_compare[['fusion_strategy', 'granularity', 'mean', 'z_score_vs_champ', 'is_significantly_worse']])
+
+print("--- Top 5 Performing Models (Ranked by Stability) ---")
+# We include CV and Z-Score to show why they were ranked this way
+print(table_whisker_box_compare[[
+    'fusion_strategy', 
+    'granularity', 
+    'f1_score_percent', 
+    'cv_percent', 
+    'stability_score'
+]].head(5))
+
+# Identify the absolute best based on the stability floor
+best = table_whisker_box_compare.iloc[0]
+
+print(f"\nBEST MODEL: {best['fusion_strategy']} (Granularity: {best['granularity']}) with F1: {best['f1_score_percent']}%")
+
+if best['z_score_vs_champ'] < 1.96 and best.name != 0:
+    print(f"NOTE: This model is statistically tied with the highest mean provider.")
+print("\n")    

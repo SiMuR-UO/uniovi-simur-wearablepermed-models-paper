@@ -1,14 +1,16 @@
 import pandas as pd
 
+METRIC_PI_FILENAME = 'metrics_pi.csv'
+METRIC_M_FILENAM = 'metrics_m.csv'
 METRIC_FILENAME = 'metrics.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
-individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/metrics_pi.csv')
-individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/metrics_m.csv')
-individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/metrics_pi.csv')
-individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/metrics_m.csv')
-individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/metrics_pi.csv')
-individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/metrics_m.csv')
+individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_PI_FILENAME)
+individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_M_FILENAM)
+individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_PI_FILENAME)
+individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_M_FILENAM)
+individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_PI_FILENAME)
+individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_M_FILENAM)
 concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/' + METRIC_FILENAME)
 concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/' + METRIC_FILENAME)
 concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/' + METRIC_FILENAME)

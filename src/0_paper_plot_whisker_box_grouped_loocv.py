@@ -2,15 +2,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-METRIC_FILENAME = 'metrics_loocv.csv'
+METRIC_PI_FILENAME = 'metrics_loocv_pi_all.csv'
+METRIC_M_FILENAM = 'metrics_loocv_m_all.csv'
+METRIC_FILENAME = 'metrics_loocv_all.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
-individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/metrics_pi.csv')
-individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/metrics_m.csv')
-individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/metrics_pi.csv')
-individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/metrics_m.csv')
-individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/metrics_pi.csv')
-individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/metrics_m.csv')
+individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_PI_FILENAME)
+individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_M_FILENAM)
+individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_PI_FILENAME)
+individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_M_FILENAM)
+individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_PI_FILENAME)
+individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_M_FILENAM)
 concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/' + METRIC_FILENAME)
 concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/' + METRIC_FILENAME)
 concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/' + METRIC_FILENAME)
@@ -125,5 +127,5 @@ for patch, color in zip(ax_15_boxplot['boxes'], colors):
 plt.tight_layout()
 
 print("🟢 Save box-and-whisker plot")
-plt.savefig(str(Path.cwd()) + "/paper/whisker_box_plot_classes_loocv.png", dpi=300, bbox_inches="tight")
+plt.savefig(str(Path.cwd()) + "/paper/whisker_box_plot_classes_loocv_all.png", dpi=300, bbox_inches="tight")
 plt.show()

@@ -94,6 +94,8 @@ N_SPLITS = 3
 
 metrics = []
 
+CSV_SUFFIX_FILE_NAME = "_all.csv"
+
 def parse_args(args):
     """Parse command line parameters
 
@@ -356,7 +358,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_loocv_" + args.segment_body.lower() + ".csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/1_individual/" + get_save_path(args.superclases) + "/metrics_loocv_" + args.segment_body.lower() + CSV_SUFFIX_FILE_NAME, index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

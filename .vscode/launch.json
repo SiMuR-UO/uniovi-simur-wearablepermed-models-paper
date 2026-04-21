@@ -22,30 +22,35 @@
             // 0-Plot Whisker/box Grouped desyncronization chart for 8 classifiers and stacking random forest model: 0_plot_whisker_box_grouped_desync.py
 
             // 1-Individual Random Forest classifier model: 1_individual_rf.py
-            //"--stack-all", "./datasets/X_y_m_final.npz",
+            //"--stack-all", "./datasets/X_y_m_final.npz",                  
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
-            //"--segment-body", "M",
-            //"--superclases", "CPA-METS",
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
+            //"--segment-body", "PI",
+            //"--superclases", "Captured24",
 
             // 2-Concatenated Datasets and one Random Forest classifier model: 2_concatenate_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
             //"--superclases", "Captured24",
 
             // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 3_stack_rf_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
-            //"--superclases", "Captured24",
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",            
+            //"--superclases", "CPA-METS",
             
             // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 3_stack_ae_PI_M.py
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",            
             //"--superclases", "Captured24",
 
             // 4-MoE with two Random Forest experts and one Logistic Regression Gate: 4_mixture_of_experts_rf_PI_M.py.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",
             //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
-            //"--superclases", "Captured24",
+            //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes/data_feature_all.npz",            
+            //"--superclases", "CPA-METS",
 
             // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_ae_PI_M.py 
             //"--stack-all", "./datasets/X_y_m_final.npz",

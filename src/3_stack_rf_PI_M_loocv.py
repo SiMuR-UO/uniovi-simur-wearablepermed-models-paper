@@ -98,6 +98,8 @@ N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 CV = 3
 
+CSV_FILE_NAME = "metrics_loocv_all.csv"
+
 metrics = []
 
 def parse_args(args):
@@ -477,7 +479,7 @@ df_metrics = pd.concat(
 )
 
 print("🟢 Save metrics")
-df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_rf/" + get_save_path(args.superclases) + "/metrics_loocv.csv", index=False)
+df_metrics.to_csv(str(Path.cwd()) + "/paper/3_statcking_rf/" + get_save_path(args.superclases) + "/" + CSV_FILE_NAME, index=False)
 
 elapsed_app = time.perf_counter() - start_app
 print(f"Application time: {elapsed_app:.2f} seconds")

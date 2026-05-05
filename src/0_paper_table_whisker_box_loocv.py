@@ -1,17 +1,21 @@
 import numpy as np
 import pandas as pd
 
-METRIC_PI_FILENAME = 'metrics_loocv_pi.csv'
-METRIC_M_FILENAM = 'metrics_loocv_m.csv'
-METRIC_FILENAME = 'metrics_loocv.csv'
+METRIC_PI_FILENAME = 'metrics_loocv_pi_all.csv'
+METRIC_M_FILENAM = 'metrics_loocv_m_all.csv'
+METRIC_C_FILENAM = 'metrics_loocv_c_all.csv'
+METRIC_FILENAME = 'metrics_loocv_all.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
 individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_PI_FILENAME)
 individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_M_FILENAM)
+individual_4_c_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_C_FILENAM)
 individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_PI_FILENAME)
 individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_M_FILENAM)
+individual_8_c_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_C_FILENAM)
 individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_PI_FILENAME)
 individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_M_FILENAM)
+individual_15_c_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_C_FILENAM)
 concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/' + METRIC_FILENAME)
 concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/' + METRIC_FILENAME)
 concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/' + METRIC_FILENAME)
@@ -35,6 +39,9 @@ individual_15_pi_data = individual_15_pi_data[individual_15_pi_data["loop"].isin
 individual_4_m_data = individual_4_m_data[individual_4_m_data["loop"].isin(["mean", "std"])]
 individual_8_m_data = individual_8_m_data[individual_8_m_data["loop"].isin(["mean", "std"])]
 individual_15_m_data = individual_15_m_data[individual_15_m_data["loop"].isin(["mean", "std"])]
+individual_4_c_data = individual_4_c_data[individual_4_c_data["loop"].isin(["mean", "std"])]
+individual_8_c_data = individual_8_c_data[individual_8_c_data["loop"].isin(["mean", "std"])]
+individual_15_c_data = individual_15_c_data[individual_15_c_data["loop"].isin(["mean", "std"])]
 concatenate_4_data = concatenate_4_data[concatenate_4_data["loop"].isin(["mean", "std"])]
 concatenate_8_data = concatenate_8_data[concatenate_8_data["loop"].isin(["mean", "std"])]
 concatenate_15_data = concatenate_15_data[concatenate_15_data["loop"].isin(["mean", "std"])]
@@ -124,6 +131,30 @@ individual_15_m_data = (
 )
 individual_15_m_data.insert(1, "granularity", 15)
 individual_15_m_data.insert(2, "fusion_strategy", "individual_m")
+individual_4_c_data = (
+    individual_4_c_data.set_index("loop")   # mean/std become columns after transpose
+      .T                                     # transpose metrics to rows
+      .reset_index()
+      .rename(columns={"index": "metric"})
+)
+individual_4_c_data.insert(1, "granularity", 4)
+individual_4_c_data.insert(2, "fusion_strategy", "individual_c")
+individual_8_c_data = (
+    individual_8_c_data.set_index("loop")   # mean/std become columns after transpose
+      .T                                     # transpose metrics to rows
+      .reset_index()
+      .rename(columns={"index": "metric"})
+)
+individual_8_c_data.insert(1, "granularity", 8)
+individual_8_c_data.insert(2, "fusion_strategy", "individual_c")
+individual_15_c_data = (
+    individual_15_c_data.set_index("loop")   # mean/std become columns after transpose
+      .T                                     # transpose metrics to rows
+      .reset_index()
+      .rename(columns={"index": "metric"})
+)
+individual_15_c_data.insert(1, "granularity", 15)
+individual_15_c_data.insert(2, "fusion_strategy", "individual_c")
 concatenate_4_data = (
     concatenate_4_data.set_index("loop")   # mean/std become columns after transpose
       .T                                     # transpose metrics to rows
@@ -253,6 +284,9 @@ table_whisker_box = pd.concat([
     individual_4_m_data,
     individual_8_m_data,    
     individual_15_m_data,
+    individual_4_c_data,
+    individual_8_c_data,    
+    individual_15_c_data,    
     concatenate_4_data,
     concatenate_8_data,
     concatenate_15_data,

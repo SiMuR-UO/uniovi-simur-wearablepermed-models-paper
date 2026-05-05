@@ -4,15 +4,19 @@ from pathlib import Path
 
 METRIC_PI_FILENAME = 'metrics_loocv_pi_all.csv'
 METRIC_M_FILENAM = 'metrics_loocv_m_all.csv'
+METRIC_C_FILENAM = 'metrics_loocv_c_all.csv'
 METRIC_FILENAME = 'metrics_loocv_all.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
 individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_PI_FILENAME)
 individual_4_m_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_M_FILENAM)
+individual_4_c_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_C_FILENAM)
 individual_8_pi_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_PI_FILENAME)
 individual_8_m_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_M_FILENAM)
+individual_8_c_data = pd.read_csv('./paper/1_individual/8_classes/' + METRIC_C_FILENAM)
 individual_15_pi_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_PI_FILENAME)
 individual_15_m_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_M_FILENAM)
+individual_15_c_data = pd.read_csv('./paper/1_individual/15_classes/' + METRIC_C_FILENAM)
 concatenate_4_data = pd.read_csv('./paper/2_concatenate/4_classes/' + METRIC_FILENAME)
 concatenate_8_data = pd.read_csv('./paper/2_concatenate/8_classes/' + METRIC_FILENAME)
 concatenate_15_data = pd.read_csv('./paper/2_concatenate/15_classes/' + METRIC_FILENAME)
@@ -33,6 +37,7 @@ print("🟢 Create f1_score dataframes grouped by classes: 4, 8, 15")
 df_4 = pd.DataFrame({
     "individual_pi": individual_4_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "individual_m": individual_4_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "individual_c": individual_4_c_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
     "concatenated": concatenate_4_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "stacking_rf": stacking_rf_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "stacking_ae": stacking_ae_4_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
@@ -43,6 +48,7 @@ df_4 = pd.DataFrame({
 df_8 = pd.DataFrame({
     "individual_pi": individual_8_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "individual_m": individual_8_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "individual_c": individual_8_c_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
     "concatenated": concatenate_8_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "stacking_rf": stacking_rf_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "stacking_ae": stacking_ae_8_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
@@ -53,6 +59,7 @@ df_8 = pd.DataFrame({
 df_15 = pd.DataFrame({
     "individual_pi": individual_15_pi_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "individual_m": individual_15_m_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
+    "individual_c": individual_15_c_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),    
     "concatenated": concatenate_15_data.loc[:29,"model_f1_score_test"].to_numpy().astype(float),
     "stacking_rf": stacking_rf_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
     "stacking_ae": stacking_ae_15_data.loc[:29,"meta_model_f1_score"].to_numpy().astype(float),
@@ -114,7 +121,7 @@ for label in ax_15.get_xticklabels():
     label.set_rotation_mode('anchor')
 
 # fill with colors
-colors = ['#e9162d', '#f28200', '#ffdb28', '#1fb819', '#00e1da', '#007bd8', '#8f2be7', '#fb4fd9']
+colors = ['#e9162d', '#f28200', '#ffdb28', '#1fb819', '#00e1da', '#007bd8', '#8f2be7', '#fb4fd9', "#d86f80"]
 for patch, color in zip(ax_4_boxplot['boxes'], colors):
     patch.set_facecolor(color)
 

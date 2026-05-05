@@ -125,7 +125,7 @@ def parse_args(args):
         "--segment-body",
         required=True,
         dest="segment_body",    
-        help=f"Segment Body: PI, M"
+        help=f"Segment Body: PI, M, C"
     )           
     parser.add_argument(
         "-loops",
@@ -215,19 +215,21 @@ def participant_loocv_iterator(X_data, y_data, m_data, segment_body):
         print(f"Training on {len(np.unique(m_train))} other participants")
 
         # split concatate dataset between PI and M
-        X_train_M = X_train[:, :91]
-        X_train_PI = X_train[:, 91:]
+        # X_train_M = X_train[:, :91]
+        # X_train_PI = X_train[:, 91:]
 
-        X_test_M = X_test[:, :91]
-        X_test_PI = X_test[:, 91:]
+        # X_test_M = X_test[:, :91]
+        # X_test_PI = X_test[:, 91:]
 
-        if segment_body == 'PI':
-            yield X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
-        elif segment_body == 'M':
-            yield X_train_M, X_test_M, y_train, y_test, m_train, m_test
-        else:
-            raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
+        # if segment_body == 'PI':
+        #     yield X_train_PI, X_test_PI, y_train, y_test, m_train, m_test
+        # elif segment_body == 'M':
+        #     yield X_train_M, X_test_M, y_train, y_test, m_train, m_test
+        # else:
+        #     raise Exception("Sorry, Segment body " + segment_body + " is not contemplated")
             
+        yield X_train, X_test, y_train, y_test, m_train, m_test
+           
 def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
     n_estimators = trial.suggest_int("n_estimators", 50, 500)

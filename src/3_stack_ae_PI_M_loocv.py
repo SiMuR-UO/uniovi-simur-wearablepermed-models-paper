@@ -95,7 +95,7 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-CSV_FILE_NAME = "metrics_loocv_all.csv"
+CSV_FILE_NAME = "metrics_pi_c_loocv_all.csv"
 
 metrics = []
 

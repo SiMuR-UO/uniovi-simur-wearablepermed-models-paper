@@ -92,7 +92,7 @@ WINDOW_METADATA = "arr_2"
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 
-CSV_FILE_NAME = "metrics_loocv_all.csv"
+CSV_FILE_NAME = "metrics_pi_m_c_loocv_all.csv"
 
 metrics = []
 

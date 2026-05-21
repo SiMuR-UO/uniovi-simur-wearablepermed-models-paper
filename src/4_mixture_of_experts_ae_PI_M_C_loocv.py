@@ -99,7 +99,7 @@ WINDOW_DATA = "arr_0"
 WINDOW_LABELS = "arr_1"
 WINDOW_METADATA = "arr_2"
 
-CSV_FILE_NAME = "metrics_m_c_loocv_all.csv"
+CSV_FILE_NAME = "metrics_pi_m_c_loocv_all.csv"
 
 metrics = []
 
@@ -229,14 +229,15 @@ def participant_loocv_iterator(X_data, y_data, m_data, val_size=0.2):
         print(f"Train Groups: {len(np.unique(m_train))} | Val Groups: {len(np.unique(m_val))}")
 
         # Split features into M(91) and PI(91)
-        X_train_M, X_train_PI = X_train[:, :91], X_train[:, 91:]
-        X_val_M, X_val_PI     = X_val[:, :91],   X_val[:, 91:]
-        X_test_M, X_test_PI   = X_test[:, :91],  X_test[:, 91:]
+        X_train_M, X_train_PI, X_train_C = X_train[:, :91], X_train[:, 91:182], X_train[:, 182:273]
+        X_val_M, X_val_PI, X_val_C       = X_val[:, :91],   X_val[:, 91:182],   X_val[:, 182:273]
+        X_test_M, X_test_PI, X_test_C    = X_test[:, :91],  X_test[:, 91:182],  X_test[:, 182:273]
 
         # Yield the data so the loop can process one fold at a time
         yield (
             X_train_PI, X_val_PI, X_test_PI,
             X_train_M,  X_val_M,  X_test_M,
+            X_train_C,  X_val_C,  X_test_C,
             y_train, y_val, y_test,
             m_train, m_val, m_test,
             class_names
@@ -293,62 +294,92 @@ def extract_latent_stats(encoder, X, batch_size=256):
 
     return z
 
-def build_gate_router(expert_PI, expert_M, X_PI, X_M, y):
+def build_gate_router(expert_PI, expert_M, expert_C, X_PI, X_M, X_C, y):
+    # 1. Get predicted probabilities for all three experts
     p_PI_train = expert_PI.predict_proba(X_PI)
     p_M_train = expert_M.predict_proba(X_M)
+    p_C_train = expert_C.predict_proba(X_C)
 
-    # Per-sample correctness
+    # 2. Determine per-sample correctness (1 if correct, 0 if incorrect)
     correct_PI = (p_PI_train.argmax(axis=1) == y).astype(int)
     correct_M = (p_M_train.argmax(axis=1) == y).astype(int)
+    correct_C = (p_C_train.argmax(axis=1) == y).astype(int)
 
+    # 3. Extract the confidence (maximum probability) for each exper
     conf_PI = p_PI_train.max(axis=1)
     conf_M = p_M_train.max(axis=1)
+    conf_C = p_C_train.max(axis=1)
 
+# 4. Stack columns for matrix operations: Shape (N, 3)
+    # Column indices: 0 = C, 1 = M, 2 = PI (matching your target label assignment)
+    correct_matrix = np.column_stack((correct_C, correct_M, correct_PI))
+    conf_matrix    = np.column_stack((conf_C, conf_M, conf_PI))
+
+    # 5. Initialize the routing targets array
     gate_y = np.zeros_like(y)
+    num_samples = len(y)
 
-    mask_PI = (correct_PI == 1) & (correct_M == 0)
-    gate_y[mask_PI] = 1
-
-    mask_M = (correct_M == 1) & (correct_PI == 0)
-    gate_y[mask_M] = 0
-
-    mask_tie = (correct_PI == correct_M)
-    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
+    # 6. Route samples based on correctness and confidence
+    for i in range(num_samples):
+        correct_row = correct_matrix[i]
+        conf_row = conf_matrix[i]
+        
+        max_correctness = correct_row.max()
+        
+        # Find which experts achieved the maximum correctness for this sample
+        # (e.g., if any are correct, find the correct ones; if all are wrong, find all of them)
+        candidates = np.where(correct_row == max_correctness)[0]
+        
+        if len(candidates) == 1:
+            # One clear winner based on correctness
+            gate_y[i] = candidates[0]
+        else:
+            # Tie-breaker: Among the best-performing experts, pick the one with the highest confidence
+            best_candidate_idx = candidates[np.argmax(conf_row[candidates])]
+            gate_y[i] = best_candidate_idx
 
     return gate_y
 
-def mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
-    # Expert probabilities prediction (N,8)
+def mixture_of_experts_soft_predict_proba(clf_PI, clf_M, clf_C, gate, Z_test_PI, Z_test_M, Z_test_C):
+    # 1. Expert probabilities prediction
     p_test_PI = clf_PI.predict_proba(Z_test_PI)
-    p_test_M = clf_M.predict_proba(Z_test_M)
+    p_test_M  = clf_M.predict_proba(Z_test_M)
+    p_test_C  = clf_C.predict_proba(Z_test_C)
 
-    # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
+    # 2. Gate probabilities prediction (N, 3)
+    # Ensure features are stacked in the same order used to train the gate
+    gate_features = np.hstack([p_test_C, p_test_M, p_test_PI])
+    w = gate.predict_proba(gate_features)
 
-    # Extract expert weights (N, 1)
-    w_PI = w[:, 1].reshape(-1, 1)
-    w_M = w[:, 0].reshape(-1, 1)
+    # 3. Extract expert weights (N, 1) based on the mapping: 0=C, 1=M, 2=PI
+    w_C  = w[:, 0].reshape(-1, 1)
+    w_M  = w[:, 1].reshape(-1, 1)
+    w_PI = w[:, 2].reshape(-1, 1)
 
-    # Weighted mixture
-    return w_PI * p_test_PI + w_M * p_test_M
+    # 4. Weighted mixture
+    return (w_C * p_test_C) + (w_M * p_test_M) + (w_PI * p_test_PI)
 
-def mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M):
-    # Expert probabilities prediction (N, 8)
+def mixture_of_experts_hard_predict_proba(clf_PI, clf_M, clf_C, gate, Z_test_PI, Z_test_M, Z_test_C):
+    # 1. Expert probabilities prediction
     p_test_PI = clf_PI.predict_proba(Z_test_PI)
-    p_test_M = clf_M.predict_proba(Z_test_M)
+    p_test_M  = clf_M.predict_proba(Z_test_M)
+    p_test_C  = clf_C.predict_proba(Z_test_C)
 
-    # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([p_test_PI, p_test_M]))
+    # 2. Gate probabilities prediction (N, 3)
+    gate_features = np.hstack([p_test_C, p_test_M, p_test_PI])
+    w = gate.predict_proba(gate_features)
 
-    # Choose expert per sample (top-1)
-    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
+    # 3. Choose the top-1 expert per sample (returns 0, 1, or 2 for each row)
+    chosen_expert_indices = w.argmax(axis=1)
 
-    # Allocate output
-    p_final = np.zeros_like(p_test_PI)
+    # 4. Stack all expert predictions into a 3D array: Shape (N, 3, Num_Classes)
+    # Axis 1 matches our indices: 0 = C, 1 = M, 2 = PI
+    stacked_experts = np.stack([p_test_C, p_test_M, p_test_PI], axis=1)
 
-    # Fill per-sample
-    p_final[choose_PI] = p_test_PI[choose_PI]
-    p_final[~choose_PI] = p_test_M[~choose_PI]
+    # 5. Advanced Indexing: Pick the chosen expert's slice for each sample row
+    # row_indices creates a sequence from 0 to N-1
+    row_indices = np.arange(len(chosen_expert_indices))
+    p_final = stacked_experts[row_indices, chosen_expert_indices]
 
     return p_final
 
@@ -392,13 +423,15 @@ def plot_reconstruction(model, X, file_name, n_samples=5, title="Autoencoder Rec
     plt.tight_layout()
     plt.savefig(f"images/{file_name}", dpi=300, bbox_inches="tight")
 
-def compare_reconstruction_errors(model_PI, model_M, X_PI, X_M, file_name):
+def compare_reconstruction_errors(model_PI, model_M, model_C, X_PI, X_M, X_C, file_name):
     err_PI = np.mean((X_PI - model_PI.predict(X_PI)) ** 2, axis=1)
     err_M  = np.mean((X_M  - model_M.predict(X_M)) ** 2, axis=1)
+    err_C  = np.mean((X_C  - model_C.predict(X_C)) ** 2, axis=1)
 
     plt.figure(figsize=(8, 4))
     plt.hist(err_PI, bins=50, alpha=0.7, label="PI Autoencoder")
     plt.hist(err_M,  bins=50, alpha=0.7, label="M Autoencoder")
+    plt.hist(err_C,  bins=50, alpha=0.7, label="C Autoencoder")
     plt.xlabel("Reconstruction MSE")
     plt.ylabel("Count")
     plt.title("Reconstruction Error Comparison")
@@ -495,11 +528,9 @@ X_data = sc.fit_transform(X_data)
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
-for loop, (X_train_PI,
-           X_validation_PI,
-           X_test_PI, X_train_M,
-           X_validation_M,
-           X_test_M,
+for loop, (X_train_PI, X_validation_PI, X_test_PI, 
+           X_train_M, X_validation_M, X_test_M,
+           X_train_C, X_validation_C, X_test_C,
            y_train,
            y_validation,
            y_test, m_train,
@@ -525,6 +556,13 @@ for loop, (X_train_PI,
 
     best_params_M = study_M.best_trial.params
     print(best_params_M)
+
+    print("🟢 Optimize Autoencoder hyperparameters C")
+    study_C = optuna.create_study(direction="minimize")
+    study_C.optimize(lambda trial: objective(trial, X_train_C, X_validation_C), n_trials=args.optimize_trials)
+
+    best_params_C = study_C.best_trial.params
+    print(best_params_C)
 
     print("🟢 Build Autoencoder with best parameters PI")
     clear_session()
@@ -552,6 +590,19 @@ for loop, (X_train_PI,
 
     autoencoder_M.summary()
 
+    print("🟢 Build Autoencoder with best parameters C")
+    clear_session()
+
+    autoencoder_C, encoder_C = build_autoencoder(input_dim=X_train_C.shape[1], latent_dim=best_params_C["latent_dim"], dropout=best_params_C["dropout"])
+    
+    print("🟢 Freeze Encoder C")
+    encoder_C.trainable = False
+
+    print("🟢 Compile Autoencoder C")
+    autoencoder_C.compile(optimizer=Adam(learning_rate=best_params_C["lr"]), loss="mse")
+
+    autoencoder_C.summary()
+
     print("🟢 Compute reconstruction MSE for PI")
     X_train_pred_PI = autoencoder_PI.predict(X_train_PI)
     X_test_pred_PI  = autoencoder_PI.predict(X_test_PI)
@@ -571,6 +622,16 @@ for loop, (X_train_PI,
 
     print("Mean reconstruction MSE for train M:", np.mean(mse_train_M))
     print("Mean reconstruction MSE for test M:", np.mean(mse_test_M))
+
+    print("🟢 Compute reconstruction MSE for C")
+    X_train_pred_C = autoencoder_C.predict(X_train_C)
+    X_test_pred_C  = autoencoder_C.predict(X_test_C)
+
+    mse_train_C = np.mean(np.square(X_train_C - X_train_pred_C), axis=1)
+    mse_test_C  = np.mean(np.square(X_test_C - X_test_pred_C),  axis=1)
+
+    print("Mean reconstruction MSE for train C:", np.mean(mse_train_C))
+    print("Mean reconstruction MSE for test C:", np.mean(mse_test_C))
 
     print("🟢 Build classifier PI")
     # I will use the latent space to train the classifier
@@ -599,12 +660,26 @@ for loop, (X_train_PI,
     acc_score_test_M = accuracy_score(y_test, y_test_pred_M)
     f1_score_test_M = f1_score(y_test, y_test_pred_M, average='macro')
 
+    print("🟢 Build classifier C")
+    Z_train_C = encoder_C.predict(X_train_C)
+
+    clf_C = LogisticRegression(max_iter=1000)
+    clf_C.fit(Z_train_C, y_train)
+
+    print("🟢 Test classifier C")
+    Z_test_C = encoder_C.predict(X_test_C)
+
+    y_test_pred_C = clf_C.predict(Z_test_C)
+    acc_score_test_C = accuracy_score(y_test, y_test_pred_C)
+    f1_score_test_C = f1_score(y_test, y_test_pred_C, average='macro')
+
     print("🟢 Build gate validation datasets")
     X_train_pred_PI = clf_PI.predict_proba(Z_train_PI)
     X_train_pred_M = clf_M.predict_proba(Z_train_M)
+    X_train_pred_C = clf_C.predict_proba(Z_train_C)
 
-    X_gate_val = np.hstack([X_train_pred_PI, X_train_pred_M])
-    y_gate_val = build_gate_router(clf_PI, clf_M, Z_train_PI, Z_train_M, y_train)
+    X_gate_val = np.hstack([X_train_pred_PI, X_train_pred_M, X_train_pred_C])
+    y_gate_val = build_gate_router(clf_PI, clf_M, clf_C, Z_train_PI, Z_train_M, Z_train_C, y_train)
 
     print("🟢 Training gate")
     gate = Pipeline([
@@ -621,9 +696,10 @@ for loop, (X_train_PI,
     print("🟢 Test gate")
     X_test_pred_PI = clf_PI.predict_proba(Z_test_PI)
     X_test_pred_M = clf_M.predict_proba(Z_test_M)
-    
-    X_gate_test = np.hstack([X_test_pred_PI, X_test_pred_M])
-    y_gate_test = build_gate_router(clf_PI, clf_M, Z_test_PI, Z_test_M, y_test)
+    X_test_pred_C = clf_C.predict_proba(Z_test_C)
+
+    X_gate_test = np.hstack([X_test_pred_PI, X_test_pred_M, X_test_pred_C])
+    y_gate_test = build_gate_router(clf_PI, clf_M, clf_C, Z_test_PI, Z_test_M, Z_test_C, y_test)
 
     gate_pred = gate.predict(X_gate_test)
 
@@ -632,8 +708,7 @@ for loop, (X_train_PI,
     print("Gate accuracy:", gate_acc)
 
     print("🟢 Soft Test MoE")
-    p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
-
+    p_final_soft = mixture_of_experts_soft_predict_proba(clf_PI, clf_M, clf_C, gate, Z_test_PI, Z_test_M, Z_test_C)
     y_pred_soft = p_final_soft.argmax(axis=1)
 
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
@@ -642,8 +717,7 @@ for loop, (X_train_PI,
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
     print("🟢 Hard Test MoE")
-    p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, gate, Z_test_PI, Z_test_M)
-
+    p_final_hard = mixture_of_experts_hard_predict_proba(clf_PI, clf_M, clf_C, gate, Z_test_PI, Z_test_M, Z_test_C)
     y_pred_hard = p_final_hard.argmax(axis=1)
 
     moe_acc_hard = accuracy_score(y_test, y_pred_hard)
@@ -658,6 +732,8 @@ for loop, (X_train_PI,
     metric["expert_model_test_f1_score_PI"] = f1_score_test_PI
     metric["expert_model_test_accuracy_M"] = acc_score_test_M
     metric["expert_model_test_f1_score_M"] = f1_score_test_M
+    metric["expert_model_test_accuracy_C"] = acc_score_test_C
+    metric["expert_model_test_f1_score_C"] = f1_score_test_C    
     metric["gate_model_test_accuracy"] = gate_acc
     metric["moe_model_test_soft_accuracy"] = moe_acc_soft
     metric["moe_model_test_soft_f1_score"] = moe_f1_weight_soft
@@ -670,21 +746,26 @@ for loop, (X_train_PI,
         print("🟢 Reconstruction plots")
         plot_reconstruction_error(autoencoder_PI, X_test_PI, "mse_AE_PI.png", "Reconstruction Error PI")
         plot_reconstruction_error(autoencoder_M, X_test_M, "mse_AE_M.png", "Reconstruction Error M")
+        plot_reconstruction_error(autoencoder_C, X_test_C, "mse_AE_C.png", "Reconstruction Error C")
 
         plot_reconstruction(autoencoder_PI, X_test_PI, "reconstruction_AE_PI.png", n_samples=5, title="Samples AE Reconstruction PI")
         plot_reconstruction(autoencoder_M, X_test_M, "reconstruction_AE_M.png", n_samples=5, title="Samples AE Reconstruction M")
+        plot_reconstruction(autoencoder_C, X_test_C, "reconstruction_AE_C.png", n_samples=5, title="Samples AE Reconstruction C")
 
-        compare_reconstruction_errors(autoencoder_PI, autoencoder_M, X_test_PI, X_test_M, "compare_reconstruction_AE_PI_M.png")
+        compare_reconstruction_errors(autoencoder_PI, autoencoder_M, autoencoder_C, X_test_PI, X_test_M, X_test_C, "compare_reconstruction_AE_PI_M_C.png")
 
         print("🟢 Latent Space t-SNE plots")
         z_PI = extract_latent_stats(encoder_PI, X_train_PI)
         z_M  = extract_latent_stats(encoder_M, X_train_M)
+        z_C  = extract_latent_stats(encoder_C, X_train_C)
 
         Z_PI_tsne = compute_tsne(z_PI)
         Z_M_tsne  = compute_tsne(z_M)
+        Z_C_tsne  = compute_tsne(z_C)
 
         plot_tsne_autoencoder(Z_PI_tsne, y_train, class_names, title="AE Latent Space (PI)", file_name="tsne_AE_latent_PI.png")
         plot_tsne_autoencoder(Z_M_tsne, y_train, class_names, title="AE Latent Space (M)", file_name="tsne_AE_latent_M.png")
+        plot_tsne_autoencoder(Z_C_tsne, y_train, class_names, title="AE Latent Space (C)", file_name="tsne_AE_latent_C.png")
 
     elapsed_loop = time.perf_counter() - start_loop
     print(f"Loop time: {elapsed_loop:.2f} seconds")        

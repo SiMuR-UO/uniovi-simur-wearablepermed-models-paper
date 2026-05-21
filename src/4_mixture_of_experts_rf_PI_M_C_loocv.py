@@ -96,7 +96,7 @@ WINDOW_METADATA = "arr_2"
 N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 
-CSV_FILE_NAME = "metrics_m_c_loocv_all.csv"
+CSV_FILE_NAME = "metrics_pi_m_c_loocv_all.csv"
 
 metrics = []
 
@@ -193,12 +193,14 @@ def participant_loocv_iterator(X_data, y_data, m_data):
 
         # split concatenated dataset between PI and M
         X_train_M = X_train[:, :91]
-        X_train_PI = X_train[:, 91:]
+        X_train_PI = X_train[:, 91:182]
+        X_train_C = X_train[:, 182:273]
 
         X_test_M = X_test[:, :91]
-        X_test_PI = X_test[:, 91:]
+        X_test_PI = X_test[:, 91:182]
+        X_test_C = X_test[:, 182:273]
 
-        yield X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
+        yield X_train_PI, X_test_PI, X_train_M, X_test_M, X_train_C, X_test_C, y_train, y_test, m_train, m_test
 
 def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
@@ -233,7 +235,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, n_splits=5):
+def generate_oof_predictions(base_model_PI, base_model_M, base_model_C, X_PI, X_M, X_C, y, groups, n_splits=5):
     gkf = GroupKFold(n_splits=n_splits)
 
     n_samples = X_PI.shape[0]
@@ -244,6 +246,8 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
     p_PI_oof = np.zeros((n_samples, n_classes))
     X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
+    X_C_oof = np.zeros(X_C.shape)
+    p_C_oof = np.zeros((n_samples, n_classes))    
     y_oof = np.zeros((n_samples, ))
 
     for fold, (fold_train_idx, fold_test_idx) in enumerate(gkf.split(X_PI, y, groups)):
@@ -252,6 +256,7 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
         # Split data
         X_PI_train, X_PI_test = X_PI[fold_train_idx], X_PI[fold_test_idx]
         X_M_train, X_M_test = X_M[fold_train_idx], X_M[fold_test_idx]
+        X_C_train, X_C_test = X_C[fold_train_idx], X_C[fold_test_idx]
         y_train, y_test = y[fold_train_idx], y[fold_test_idx]
 
         # Predict on validation on fold for PI
@@ -266,63 +271,89 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
         X_M_oof[fold_test_idx] = X_M_test
         p_M_oof[fold_test_idx] = base_model_M.predict_proba(X_M_test)        
 
+        # Predict on validation on fold for C
+        base_model_C.fit(X_C_train, y_train)
+
+        X_C_oof[fold_test_idx] = X_C_test
+        p_C_oof[fold_test_idx] = base_model_C.predict_proba(X_C_test) 
+
         # Label predict on fold
         y_oof[fold_test_idx] = y_test
 
-    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, y_oof
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, X_C_oof, p_C_oof, y_oof
 
-def build_gate_router(p_PI_val, p_M_val, y):
+def build_gate_router(p_PI_val, p_M_val, p_C_val, y):
+    """
+    Builds a gate router for three sensors (PI, M, C).
+    Returns gate_y where:
+    0 = M, 1 = PI, 2 = C
+    """    
     correct_PI = (p_PI_val.argmax(axis=1) == y).astype(int)
     correct_M = (p_M_val.argmax(axis=1) == y).astype(int)
+    correct_C = (p_C_val.argmax(axis=1) == y).astype(int)
 
+    # 2. Get confidence levels
     conf_PI = p_PI_val.max(axis=1)
     conf_M = p_M_val.max(axis=1)
+    conf_C = p_C_val.max(axis=1)
 
-    gate_y = np.zeros_like(y)
+    # 3. Combine correctness and confidence
+    # We add a large constant to confidence if the sensor is correct 
+    # to ensure any correct sensor beats any incorrect sensor.
+    score_PI = correct_PI + conf_PI
+    score_M = correct_M + conf_M
+    score_C = correct_C + conf_C
 
-    mask_PI = (correct_PI == 1) & (correct_M == 0)
-    gate_y[mask_PI] = 1
-
-    mask_M = (correct_M == 1) & (correct_PI == 0)
-    gate_y[mask_M] = 0
-
-    mask_tie = (correct_PI == correct_M)
-    gate_y[mask_tie] = (conf_PI[mask_tie] > conf_M[mask_tie]).astype(int)
+    # 4. Stack and find the index of the maximum score
+    # Stacking order: Index 0=M, 1=PI, 2=C (Matches your original logic)
+    stacked_scores = np.stack([score_M, score_PI, score_C], axis=1)
+    
+    # argmax returns the index of the highest score (0, 1, or 2)
+    gate_y = stacked_scores.argmax(axis=1)
 
     return gate_y
 
-def mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M):
+def mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M, X_test_C):
     # Expert probabilities prediction (N,8)
     p_test_PI = expert_PI.predict_proba(X_test_PI)
     p_test_M = expert_M.predict_proba(X_test_M)
+    p_test_C = expert_C.predict_proba(X_test_C)
 
-    # Gate probabilities prediction (N,2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M, p_test_PI, p_test_M]))
+    # 2. Gate probabilities prediction (N, 3)
+    # Ensure the gate was trained on this same concatenated order!
+    gate_input = np.hstack([X_test_PI, X_test_M, X_test_C, p_test_PI, p_test_M, p_test_C])
+    w = gate.predict_proba(gate_input)
 
-    # Extract expert weights (N, 1)
-    w_PI = w[:, 1].reshape(-1, 1)
+    # 3. Extract expert weights (N, 1) 
+    # Indexing depends on your build_gate_router order (e.g., 0=M, 1=PI, 2=C)
     w_M = w[:, 0].reshape(-1, 1)
+    w_PI = w[:, 1].reshape(-1, 1)
+    w_C = w[:, 2].reshape(-1, 1)
 
-    # Weighted mixture
-    return w_PI * p_test_PI + w_M * p_test_M
+    # 4. Weighted mixture
+    return (w_PI * p_test_PI) + (w_M * p_test_M) + (w_C * p_test_C)
 
-def mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M):
-    # Expert probabilities prediction (N, 8)
+def mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M, X_test_C):
+    # 1. Expert probabilities prediction
     p_test_PI = expert_PI.predict_proba(X_test_PI)
     p_test_M = expert_M.predict_proba(X_test_M)
+    p_test_C = expert_C.predict_proba(X_test_C)
 
-    # Gate probabilities prediction (N, 2)
-    w = gate.predict_proba(np.hstack([X_test_PI, X_test_M, p_test_PI, p_test_M]))
+    # 2. Gate probabilities prediction (N, 3)
+    gate_input = np.hstack([X_test_PI, X_test_M, X_test_C, p_test_PI, p_test_M, p_test_C])
+    w = gate.predict_proba(gate_input)
 
-    # Choose expert per sample (top-1)
-    choose_PI = (w[:, 1] >= w[:, 0])  # True → expert PI, False → expert M
+    # 3. Choose the expert with the highest gate weight per sample
+    # choices will be 0, 1, or 2
+    choices = w.argmax(axis=1)
 
-    # Allocate output
+    # 4. Allocate output
     p_final = np.zeros_like(p_test_PI)
 
-    # Fill per-sample
-    p_final[choose_PI] = p_test_PI[choose_PI]
-    p_final[~choose_PI] = p_test_M[~choose_PI]
+    # 5. Fill based on choices (0=M, 1=PI, 2=C)
+    p_final[choices == 0] = p_test_M[choices == 0]
+    p_final[choices == 1] = p_test_PI[choices == 1]
+    p_final[choices == 2] = p_test_C[choices == 2]
 
     return p_final
 
@@ -365,7 +396,7 @@ X_data = sc.fit_transform(X_data)
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
-for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):
+for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, X_train_C, X_test_C, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):
     start_loop = time.perf_counter()
 
     print("🔵 Loop: " + str(loop))
@@ -415,19 +446,44 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
 
     expert_M.fit(X_train_M, y_train)
 
-    print("🟢 Test expert model PI")
+    print("🟢 Test expert model M")
     acc_score_test_M = accuracy_score(y_test, expert_M.predict(X_test_M))
     f1_score_test_M = f1_score(y_test, expert_M.predict(X_test_M), average='macro') 
 
     print(f"Expert model test Accuracy M: {acc_score_test_M}")
     print(f"Expert model test F1 Score M: {f1_score_test_M}")
 
+    print("🟢 Get best hyperparameters model C")
+    study_C = optuna.create_study(direction="maximize", study_name="4_mixture_of_experts_rf_C")
+
+    study_C.optimize(lambda trial: objective(trial, X_train_C, y_train, m_train), n_trials=N_TRIALS)  # You can increase n_trials for better tuning
+    
+    trial_C = study_C.best_trial
+
+    print(f"Accuracy C: {trial_C.value}")
+    print("Best hyperparameters C: ")
+    for key, value in trial_C.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 training model with best hyperparmeters M")
+    best_params_C = trial_C.params
+    expert_C = RandomForestClassifier(**best_params_C, n_jobs=-1)
+
+    expert_C.fit(X_train_C, y_train)
+
+    print("🟢 Test expert model C")
+    acc_score_test_C = accuracy_score(y_test, expert_C.predict(X_test_C))
+    f1_score_test_C = f1_score(y_test, expert_C.predict(X_test_C), average='macro') 
+
+    print(f"Expert model test Accuracy C: {acc_score_test_C}")
+    print(f"Expert model test F1 Score C: {f1_score_test_C}")
+
     print("🟢 Training gate dataset")
-    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, y_tr = generate_oof_predictions(expert_PI, expert_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, X_C_oof, p_X_tr_C, y_tr = generate_oof_predictions(expert_PI, expert_M, expert_C, X_train_PI, X_train_M, X_train_C, y_train, m_train, n_splits=3)
 
     print("🟢 Training meta dataset")
-    X_gate_train = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
-    y_gate_train = build_gate_router(p_X_tr_PI, p_X_tr_M, y_tr)
+    X_gate_train = np.hstack([X_PI_oof, X_M_oof, X_C_oof, p_X_tr_PI, p_X_tr_M, p_X_tr_C])
+    y_gate_train = build_gate_router(p_X_tr_PI, p_X_tr_M, p_X_tr_C, y_tr)
 
     print("🟢 Training gate")
     gate = Pipeline([
@@ -442,7 +498,7 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     gate.fit(X_gate_train, y_gate_train)
 
     print("🟢 Test MoE Soft")
-    p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M)
+    p_final_soft = mixture_of_experts_soft_predict_proba(X_test_PI, X_test_M, X_test_C)
     y_pred_soft = p_final_soft.argmax(axis=1)
 
     moe_acc_soft = accuracy_score(y_test, y_pred_soft)
@@ -450,7 +506,7 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     print(f"Soft MoE Accuracy: {moe_acc_soft:.4f}, Soft MoE F1-score: {moe_f1_weight_soft:.4f}")
 
     print("🟢 Hard MoE Test")
-    p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M)
+    p_final_hard = mixture_of_experts_hard_predict_proba(X_test_PI, X_test_M, X_test_C)
     y_pred_hard = p_final_hard.argmax(axis=1)
 
     moe_acc_hard = accuracy_score(y_test, y_pred_hard)
@@ -464,6 +520,8 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     metric["base_model_validate_f1_score_PI"] = f1_score_test_PI
     metric["base_model_validate_accuracy_M"] = acc_score_test_M
     metric["base_model_train_f1_score_M"] = f1_score_test_M
+    metric["base_model_validate_accuracy_C"] = acc_score_test_C
+    metric["base_model_train_f1_score_C"] = f1_score_test_C    
     metric["moe_acc_soft"] = moe_acc_soft
     metric["moe_f1_weight_soft"] = moe_f1_weight_soft
     metric["moe_acc_hard"] = moe_acc_hard

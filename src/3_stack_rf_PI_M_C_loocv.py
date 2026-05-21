@@ -98,7 +98,7 @@ N_TRIALS = 5 # You can increase n_trials for better tuning
 N_SPLITS = 3
 CV = 3
 
-CSV_FILE_NAME = "metrics_m_c_loocv_all.csv"
+CSV_FILE_NAME = "metrics_pi_m_c_loocv_all.csv"
 
 metrics = []
 
@@ -203,12 +203,14 @@ def participant_loocv_iterator(X_data, y_data, m_data):
 
         # split concatenated dataset between PI and M
         X_train_M = X_train[:, :91]
-        X_train_PI = X_train[:, 91:]
+        X_train_PI = X_train[:, 91:182]
+        X_train_C = X_train[:, 182:273]
 
         X_test_M = X_test[:, :91]
-        X_test_PI = X_test[:, 91:]
+        X_test_PI = X_test[:, 91:182]
+        X_test_C = X_test[:, 182:273]
 
-        yield X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test
+        yield X_train_PI, X_test_PI, X_train_M, X_test_M, X_train_C, X_test_C, y_train, y_test, m_train, m_test
 
 def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Suggest hyperparameters
@@ -243,7 +245,7 @@ def objective(trial, X_train, y_train, m_train, n_splits=N_SPLITS):
     # Optuna tries to maximize accuracy
     return score
 
-def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, n_splits=5):
+def generate_oof_predictions(base_model_PI, base_model_M, base_model_C, X_PI, X_M, X_C, y, groups, n_splits=5):
     gkf = GroupKFold(n_splits=n_splits)
 
     n_samples = X_PI.shape[0]
@@ -254,6 +256,8 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
     p_PI_oof = np.zeros((n_samples, n_classes))
     X_M_oof = np.zeros(X_M.shape)
     p_M_oof = np.zeros((n_samples, n_classes))
+    X_C_oof = np.zeros(X_C.shape)
+    p_C_oof = np.zeros((n_samples, n_classes))    
     y_oof = np.zeros((n_samples, ))
 
     for fold, (fold_train_idx, fold_test_idx) in enumerate(gkf.split(X_PI, y, groups)):
@@ -262,6 +266,7 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
         # Split data
         X_PI_train, X_PI_test = X_PI[fold_train_idx], X_PI[fold_test_idx]
         X_M_train, X_M_test = X_M[fold_train_idx], X_M[fold_test_idx]
+        X_C_train, X_C_test = X_C[fold_train_idx], X_C[fold_test_idx]
         y_train, y_test = y[fold_train_idx], y[fold_test_idx]
 
         # Predict on validation on fold for PI
@@ -276,16 +281,23 @@ def generate_oof_predictions(base_model_PI, base_model_M, X_PI, X_M, y, groups, 
         X_M_oof[fold_test_idx] = X_M_test
         p_M_oof[fold_test_idx] = base_model_M.predict_proba(X_M_test)        
 
+        # Predict on validation on fold for C
+        base_model_C.fit(X_C_train, y_train)
+
+        X_C_oof[fold_test_idx] = X_C_test
+        p_C_oof[fold_test_idx] = base_model_C.predict_proba(X_C_test)  
+
         # Label predict on fold
         y_oof[fold_test_idx] = y_test
 
-    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, y_oof
+    return X_PI_oof, p_PI_oof, X_M_oof, p_M_oof, X_C_oof, p_C_oof, y_oof
 
-def stack_prediction(base_model_PI, base_mode_M, X_test_PI, X_test_M):
+def stack_prediction(base_model_PI, base_mode_M, base_mode_C, X_test_PI, X_test_M, X_test_C):
     p_test_PI = base_model_PI.predict_proba(X_test_PI)
     p_test_M = base_mode_M.predict_proba(X_test_M)
+    p_test_C = base_mode_C.predict_proba(X_test_C)
     
-    meta_X = np.hstack((X_test_PI, X_test_M, p_test_PI, p_test_M))
+    meta_X = np.hstack((X_test_PI, X_test_M, X_test_C, p_test_PI, p_test_M, p_test_C))
 
     return meta_X
 
@@ -325,7 +337,7 @@ print("? Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
 #for loop in range(args.loops):
-for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):
+for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, X_train_C, X_test_C, y_train, y_test, m_train, m_test) in enumerate(data_iterator, start=1):
     start_loop = time.perf_counter()
 
     metric = {}
@@ -338,6 +350,7 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     print("\n")
     print(f"PI X Train size: {X_train_PI.shape}, PI y Train size: {y_train.shape}, PI X Test size: {X_test_PI.shape}, PI y Test size: {y_test.shape}")
     print(f"M X Train size: {X_train_M.shape}, M y Train size: {y_train.shape}, M X Test size: {X_test_M.shape}, M y Test size: {y_test.shape}")
+    print(f"C X Train size: {X_train_C.shape}, C y Train size: {y_train.shape}, C X Test size: {X_test_C.shape}, M y Test size: {y_test.shape}")
     print("\n")
 
     print("🟢 Get best hyperparameters base model PI")
@@ -392,11 +405,37 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     print(f"Base model test Accuracy M: {model_test_accuracy_M}")
     print(f"Base model test F1 Score M: {model_test_f1_score_M}")
 
-    print("🟢 Generate training meta predictions for meta model concatenating PI and M predictions (OOF predictions of experts)")
-    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, y_tr = generate_oof_predictions(base_model_PI, base_model_M, X_train_PI, X_train_M, y_train, m_train, n_splits=3)
+    print("🟢 Get best hyperparameters base model C")
+    study_C = optuna.create_study(direction="maximize", study_name="3_stack_rf_C")
+
+    study_C.optimize(lambda trial: objective(trial, X_train_C, y_train, m_train), n_trials=N_TRIALS)
+    
+    trial_C = study_C.best_trial
+
+    print(f"Accuracy base model C: {trial_C.value}")
+    print("Best hyperparameters base model C: ")
+    for key, value in trial_C.params.items():
+        print(f"    {key}: {value}")
+
+    print("🟢 Training with best hyperparmeters base model C")
+    best_params_C = trial_C.params
+    base_model_C = RandomForestClassifier(**best_params_C, n_jobs=-1)
+
+    print("🟢 Train base model C")
+    base_model_C.fit(X_train_C, y_train)
+
+    print("🟢 Evaluate base model M")
+    model_test_accuracy_C = accuracy_score(y_test, base_model_C.predict(X_test_C))
+    model_test_f1_score_C = f1_score(y_test, base_model_C.predict(X_test_C), average='macro')
+
+    print(f"Base model test Accuracy C: {model_test_accuracy_C}")
+    print(f"Base model test F1 Score C: {model_test_f1_score_C}")
+
+    print("🟢 Generate training meta predictions for meta model concatenating PI, M and C predictions (OOF predictions of experts)")
+    X_PI_oof, p_X_tr_PI, X_M_oof, p_X_tr_M, X_C_oof, p_X_tr_C, y_tr = generate_oof_predictions(base_model_PI, base_model_M, base_model_C, X_train_PI, X_train_M, X_train_C, y_train, m_train, n_splits=3)
 
     print("🟢 Training meta dataset")
-    meta_X_tr = np.hstack([X_PI_oof, X_M_oof, p_X_tr_PI, p_X_tr_M])
+    meta_X_tr = np.hstack([X_PI_oof, X_M_oof, X_C_oof, p_X_tr_PI, p_X_tr_M, p_X_tr_C])
 
     print("🟢 Training meta model")
     meta_model = Pipeline([
@@ -412,7 +451,7 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     meta_model.fit(meta_X_tr, y_tr)
 
     print("🟢 Evaluate meta model on hold out dataset")
-    X_test_meta = stack_prediction(base_model_PI, base_model_M, X_test_PI, X_test_M)
+    X_test_meta = stack_prediction(base_model_PI, base_model_M, base_model_C, X_test_PI, X_test_M, X_test_C)
 
     meta_model_test_accuracy = accuracy_score(y_test, meta_model.predict(X_test_meta))
     meta_model_test_f1_score = f1_score(y_test, meta_model.predict(X_test_meta), average='macro')
@@ -427,6 +466,8 @@ for loop, (X_train_PI, X_test_PI, X_train_M, X_test_M, y_train, y_test, m_train,
     metric["base_model_f1_score_PI"] = model_test_f1_score_PI
     metric["base_model_accuracy_M"] = model_test_accuracy_M
     metric["base_model_f1_score_M"] = model_test_f1_score_M
+    metric["base_model_accuracy_C"] = model_test_accuracy_C
+    metric["base_model_f1_score_C"] = model_test_f1_score_C    
     metric["meta_model_accuracy"] = meta_model_test_accuracy
     metric["meta_model_f1_score"] = meta_model_test_f1_score
 

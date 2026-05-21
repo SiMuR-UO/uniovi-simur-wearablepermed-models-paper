@@ -4,7 +4,7 @@ import pandas as pd
 METRIC_PI_FILENAME = 'metrics_loocv_pi_all.csv'
 METRIC_M_FILENAM = 'metrics_loocv_m_all.csv'
 METRIC_C_FILENAM = 'metrics_loocv_c_all.csv'
-METRIC_FILENAME = 'metrics_loocv_all.csv'
+METRIC_FILENAME = 'metrics_pi_m_c_loocv_all.csv'
 
 print("🟢 Read f1_score dataframe for each model and classes")
 individual_4_pi_data = pd.read_csv('./paper/1_individual/4_classes/' + METRIC_PI_FILENAME)

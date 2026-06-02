@@ -150,9 +150,11 @@ def execute_command(command):
     return full_output_text
     
 def train_individual_strategy(stack_all, superclases, segment_body):
+    script = "1_individual_rf_loocv.py"
+
     cmd = [
         sys.executable,
-        "src/1_individual_rf_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--segment-body", segment_body,
         "--superclases", superclases
@@ -160,97 +162,133 @@ def train_individual_strategy(stack_all, superclases, segment_body):
 
     _logger.info(f"Command {cmd}")
 
-    execute_command(cmd) 
+    return execute_command(cmd) 
 
 def train_fusion_concatenated_strategy(stack_all, superclases):
+    script = "2_concatenate_rf_PI_M.py"
+
     cmd = [
         sys.executable,
-        "2_concatenate_rf_PI_M.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_stack_rf_2_segment_bodies_strategy(stack_all, superclases):
+    script = "3_stack_rf_PI_M_loocv.py"
+
     cmd = [
         sys.executable,
-        "3_stack_rf_PI_M_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_stack_ae_2_segment_bodies_strategy(stack_all, superclases):
+    script = "3_stack_ae_PI_M_loocv.py"
+
     cmd = [
         sys.executable,
-        "3_stack_ae_PI_M_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_stack_rf_3_segment_bodies_strategy(stack_all, superclases):
+    script = "3_stack_rf_PI_M_C_loocv.py"
+
     cmd = [
         sys.executable,
-        "3_stack_rf_PI_M_C_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_stack_ae_3_segment_bodies_strategy(stack_all, superclases):
+    script = "3_stack_ae_PI_M_C_loocv.py"
+
     cmd = [
         sys.executable,
-        "3_stack_ae_PI_M_C_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_moe_rf_2_segment_bodies_strategy(stack_all, superclases):
+    script = "4_mixture_of_experts_rf_PI_M_loocv.py"
+
     cmd = [
         sys.executable,
-        "4_mixture_of_experts_rf_PI_M_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_moe_ae_2_segment_bodies_strategy(stack_all, superclases):
+    script = "4_mixture_of_experts_ae_PI_M_loocv.py"
+
     cmd = [
         sys.executable,
-        "4_mixture_of_experts_ae_PI_M_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_moe_rf_3_segment_bodies_strategy(stack_all, superclases):
+    script = "4_mixture_of_experts_rf_PI_M_C_loocv.py"
+
     cmd = [
         sys.executable,
-        "4_mixture_of_experts_rf_PI_M_C_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def train_fusion_moe_ae_3_segment_bodies_strategy(stack_all, superclases):
+    script = "4_mixture_of_experts_ae_PI_M_C_loocv.py"
+
     cmd = [
         sys.executable,
-        "4_mixture_of_experts_ae_PI_M_C_loocv.py",
+        "src/" + script,
         "--stack-all", stack_all,
         "--superclases", superclases
     ]
 
     _logger.info(f"Command {cmd}")
+
+    return execute_command(cmd) 
 
 def main(args):
     """Wrapper allowing :func:`fib` to be called with string arguments in a CLI fashion

@@ -1,0 +1,95 @@
+import subprocess
+import sys
+
+# // 0-Dataset generator concatenating PI and M Datasets: 0_concatenated_segment_bodies.py
+# // 0-Model Comparation: 0_lazypredict_models.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--segment-body", "PI",
+# //"--superclases", "Captured24",
+
+# // 0-Plot Whisker/box chart for all classifiers: 0_plot_whisker_box_all.py
+# // 0-Plot Whisker/box Grouped chart for all classifiers: 0_plot_whisker_box_grouped.py
+# // 0-Plot Whisker/box Grouped desyncronization chart for 8 classifiers and stacking random forest model: 0_plot_whisker_box_grouped_desync.py
+
+# // 1-Individual Random Forest classifier model: 1_individual_rf.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",                  
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
+# //"--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
+# //"--segment-body", "C",
+# //"--superclases", "CPA-METS",
+
+# // 2-Concatenated Datasets and one Random Forest classifier model: 2_concatenate_rf_PI_M.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
+# //"--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_M_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
+# //"--superclases", "CPA-METS",
+
+# // 3-Stacking with two Random Forest base models and one Logistic Regression Target model: 3_stack_rf_PI_M.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",
+# //"--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_M_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
+# //"--superclases", "CPA-METS",
+
+# // 3-Stacking with two Autoencoder models and one Logistic Regression Target model: 3_stack_ae_PI_M.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
+# //"--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_PI_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
+# //"--superclases", "Captured24",
+
+# // 4-MoE with two Random Forest experts and one Logistic Regression Gate: 4_mixture_of_experts_rf_PI_M.py.py 
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
+# "--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_PI_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
+# //"--superclases", "CPA-METS'",
+
+# // 4-MoE with two Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_ae_PI_M.py 
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
+# //"--superclases", "Captured24",
+
+# // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_vae_PI_M.py.py
+# //"--stack-all", "./datasets/X_y_m_final.npz",
+# //"--stack-all", "/mnt/simur-fileserver/data/wearablepermed/output/case_PI_M_BRF_acc_gyr_15_classes_not_visual/data_feature_all.npz",            
+# //"--superclases", "Captured24",
+
+# Define your tasks as a list of lists
+# Each list is: [python_executable, script_name, argument1, value1, ...]
+tasks = [
+    [
+        sys.executable, "/home/miguel/git/uniovi/simur/uniovi-simur-wearablepermed-models-paper/src/1_individual_rf_loocv.py", 
+        "--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_M_BRF_acc_gyr_15_classes/data_feature_all.npz",
+        "--segment-body", "M",
+        "--superclases", "Captured24",
+    ],
+    [
+        sys.executable, "csv_to_segmented_activity.py", 
+        "--csv-file", "data.csv",
+        "--body-segment", "M"
+    ],
+    [
+        sys.executable, "train_model.py", 
+        "--epochs", "100", 
+        "--batch-size", "32"
+    ]
+]
+
+def run_pipeline(task_list):
+    for i, cmd in enumerate(task_list):
+        # cmd[1] is the script name for a cleaner print message
+        print(f"🚀 [Step {i+1}/{len(task_list)}] Executing: {cmd[1]}")
+        
+        try:
+            # subprocess.run handles the argument parsing automatically
+            result = subprocess.run(cmd, check=True, text=True)
+            
+            if result.returncode == 0:
+                print(f"✅ Step {i+1} completed successfully.\n")
+                
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error in Step {i+1} ({cmd[1]}):")
+            print(f"Return Code: {e.returncode}")
+            print("Stopping pipeline to prevent cascading errors.")
+            sys.exit(1)
+
+if __name__ == "__main__":
+    run_pipeline(tasks)

@@ -49,6 +49,17 @@
             // 4-MoE with two Variational Autoencoder experts and one Logistic Regression Gate: 4_mixture_of_experts_vae_PI_M.py.py
             //"--stack-all", "/mnt/nvme0n1p1/wearablepermed/output/case_PI_C_BRF_acc_gyr_15_classes/data_feature_all.npz",
             //"--superclases", "Captured24",
+
+            // Pipeline execution: 5_pipeline.py
+            //"--model-types", "Fusion Concatenated",
+            //"-superclasses", "CPA-METS",
+            //"-segment-bodies-combinations", "Thigh + Wrist", "Thigh + Hip", "Wrist + Hip",
+            //"--stack-folder", "/mnt/nvme0n1p1/wearablepermed/output",
+            "--model-types", "Individual",
+            "-superclasses", "CPA-METS",
+            "-segment-bodies-combinations", "Thigh",
+            "--stack-folder", "/mnt/nvme0n1p1/wearablepermed/output",            
+            "-vv"
           ],
           "console": "integratedTerminal"
         }

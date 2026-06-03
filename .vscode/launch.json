@@ -56,7 +56,7 @@
             //"-segment-bodies-combinations", "Thigh + Wrist", "Thigh + Hip", "Wrist + Hip",
             //"--stack-folder", "/mnt/nvme0n1p1/wearablepermed/output",
 
-            "--model-types", "Fusion MoE RF",
+            "--model-types", "Fusion MoE AE",
             "-superclasses", "CPA-METS",
             "-segment-bodies-combinations", "Thigh + Wrist + Hip",
             "--stack-folder", "/mnt/nvme0n1p1/wearablepermed/output",            

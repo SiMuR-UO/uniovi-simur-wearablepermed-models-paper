@@ -15,6 +15,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.manifold import TSNE
+import tensorflow as tf
 from tensorflow.keras import layers, models, regularizers
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.backend import clear_session
@@ -496,6 +497,13 @@ start_app = time.perf_counter()
 
 args = parse_args(sys.argv[1:])
 
+# Print GPU status clearly
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    print(f"✓ GPU detected: {gpus}")
+else:
+    print("✗ No GPU detected — running on CPU")
+    
 print("🟢 load stack PI+M")
 stack_data_all = np.load(args.stack_all)
 

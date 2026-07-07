@@ -6,7 +6,6 @@ import pandas as pd
 from enum import Enum
 from datetime import datetime
 
-
 __author__ = "Miguel Angel Salinas Gancedo<uo34525@uniovi.es>, Alejandro Castellanos Alonso<uo265351@uniovi.es>, Antonio Miguel López Rodriguez<amlopez@uniovi.es>"
 __copyright__ = "Uniovi"
 __license__ = "MIT"
@@ -332,18 +331,26 @@ def main(args):
                     train_individual_strategy(stack_all, superclass.value, segment_body.name)
                 elif (model_type.value in (Model_Type.FUSION_CONCATENATED.value)):
                     train_fusion_concatenated_strategy(stack_all, superclass.value)
-                elif (model_type.value in (Model_Type.FUSION_STACK_RF.value)):                    
-                    train_fusion_stack_rf_2_segment_bodies_strategy(stack_all, superclass.value)
-                    train_fusion_stack_rf_3_segment_bodies_strategy(stack_all, superclass.value)
-                elif (model_type.value in (Model_Type.FUSION_STACK_AE.value)):                    
-                    train_fusion_stack_ae_2_segment_bodies_strategy(stack_all, superclass.value)
-                    train_fusion_stack_ae_3_segment_bodies_strategy(stack_all, superclass.value)
-                elif (model_type.value in (Model_Type.FUSION_MOE_RF.value)):                    
-                    train_fusion_moe_rf_2_segment_bodies_strategy(stack_all, superclass.value)
-                    train_fusion_moe_rf_3_segment_bodies_strategy(stack_all, superclass.value)
-                elif (model_type.value in (Model_Type.FUSION_MOE_AE.value)):                    
-                    train_fusion_moe_ae_2_segment_bodies_strategy(stack_all, superclass.value)
-                    train_fusion_moe_ae_3_segment_bodies_strategy(stack_all, superclass.value)                    
+                elif (model_type.value in (Model_Type.FUSION_STACK_RF.value)):  
+                    if (segment_body.name in (Segment_Bodies_Combinations.PI_M, Segment_Bodies_Combinations.PI_C, Segment_Bodies_Combinations.M_C)):
+                        train_fusion_stack_rf_2_segment_bodies_strategy(stack_all, superclass.value)
+                    else:
+                        train_fusion_stack_rf_3_segment_bodies_strategy(stack_all, superclass.value)
+                elif (model_type.value in (Model_Type.FUSION_STACK_AE.value)):
+                    if (segment_body.name in (Segment_Bodies_Combinations.PI_M, Segment_Bodies_Combinations.PI_C, Segment_Bodies_Combinations.M_C)):
+                        train_fusion_stack_ae_2_segment_bodies_strategy(stack_all, superclass.value)
+                    else:
+                        train_fusion_stack_ae_3_segment_bodies_strategy(stack_all, superclass.value)
+                elif (model_type.value in (Model_Type.FUSION_MOE_RF.value)):
+                    if (segment_body.name in (Segment_Bodies_Combinations.PI_M, Segment_Bodies_Combinations.PI_C, Segment_Bodies_Combinations.M_C)):
+                        train_fusion_moe_rf_2_segment_bodies_strategy(stack_all, superclass.value)
+                    else:
+                        train_fusion_moe_rf_3_segment_bodies_strategy(stack_all, superclass.value)
+                elif (model_type.value in (Model_Type.FUSION_MOE_AE.value)):
+                    if (segment_body.name in (Segment_Bodies_Combinations.PI_M, Segment_Bodies_Combinations.PI_C, Segment_Bodies_Combinations.M_C)):
+                        train_fusion_moe_ae_2_segment_bodies_strategy(stack_all, superclass.value)
+                    else:
+                        train_fusion_moe_ae_3_segment_bodies_strategy(stack_all, superclass.value)                    
 
     df_error = pd.DataFrame(columns=["model_type", "command"])
 

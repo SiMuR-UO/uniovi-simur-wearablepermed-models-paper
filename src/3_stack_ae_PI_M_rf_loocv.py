@@ -335,6 +335,13 @@ X_data = sc.fit_transform(X_data)
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
+print("Autoencoder handler")
+early_stop = EarlyStopping(
+    monitor="val_loss",       # qué métrica vigilar
+    patience=10,              # epochs sin mejora antes de parar
+    restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+)
+
 loops = []
 
 for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  X_test_M, y_train, y_validation, y_test, m_train, m_validation, m_test) in enumerate(data_iterator, start=1):    
@@ -364,7 +371,22 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
 
     autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
 
+    print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder PI")
+    autoencoder_PI.fit(
+        X_train_PI, X_train_PI,
+        validation_data=(X_validation_PI, X_validation_PI),
+        epochs=best_params_PI.get("epochs", 100),
+        batch_size=best_params_PI.get("batch_size", 32),
+        callbacks=[early_stop],
+        verbose=1
+    )
+
+    print("🟢 Freeze Encoder PI")
+    encoder_PI.trainable = False
+
     autoencoder_PI.summary()
 
     print("🟢 Build Autoencoder with best parameters M")
@@ -372,7 +394,22 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
 
     autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
 
+    print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder M")
+    autoencoder_M.fit(
+        X_train_M, X_train_M,
+        validation_data=(X_validation_M, X_validation_M),
+        epochs=best_params_M.get("epochs", 100),
+        batch_size=best_params_M.get("batch_size", 32),
+        callbacks=[early_stop],
+        verbose=1
+    )
+
+    print("🟢 Freeze Encoder M")
+    encoder_M.trainable = False
+
     autoencoder_M.summary()
     
     print("🟢 Compute reconstruction MSE for PI")

@@ -562,9 +562,10 @@ for loop, (X_train_PI,
 
     autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
 
-    print("🟢 Compile and Train Autoencoder PI")
+    print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
 
+    print("🟢 Train Autoencoder PI")
     autoencoder_PI.fit(
         X_train_PI, X_train_PI,
         validation_data=(X_validation_PI, X_validation_PI),
@@ -588,6 +589,7 @@ for loop, (X_train_PI,
     print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
 
+    print("🟢 Train Autoencoder M")
     autoencoder_M.fit(
         X_train_M, X_train_M,
         validation_data=(X_validation_M, X_validation_M),

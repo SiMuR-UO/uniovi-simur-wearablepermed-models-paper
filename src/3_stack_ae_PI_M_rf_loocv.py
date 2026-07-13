@@ -256,8 +256,9 @@ def objective(trial, X_train, X_validation):
     latent_dim = trial.suggest_int("latent_dim", 4, 64)
     dropout = trial.suggest_float("dropout", 0.0, 0.5)
     l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    
+    #lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+
     autoencoder, encoder = build_autoencoder(X_train.shape[1], latent_dim, dropout, l2_reg)
 
     autoencoder.compile(
@@ -270,7 +271,9 @@ def objective(trial, X_train, X_validation):
         validation_data=(X_validation, X_validation),
         epochs=50,
         batch_size=64,
-        callbacks=[EarlyStopping(patience=5)],
+        callbacks=[EarlyStopping(
+            patience=5
+        )],
         verbose=0
     )
 
@@ -335,13 +338,6 @@ X_data = sc.fit_transform(X_data)
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
-print("Autoencoder handler")
-early_stop = EarlyStopping(
-    monitor="val_loss",       # qué métrica vigilar
-    patience=10,              # epochs sin mejora antes de parar
-    restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
-)
-
 loops = []
 
 for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  X_test_M, y_train, y_validation, y_test, m_train, m_validation, m_test) in enumerate(data_iterator, start=1):    
@@ -369,7 +365,11 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
     print("🟢 Build Autoencoder with best parameters PI")
     clear_session()
 
-    autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
+    autoencoder_PI, encoder_PI = build_autoencoder(
+        input_dim=X_train_PI.shape[1],
+        latent_dim=best_params_PI["latent_dim"],
+        dropout=best_params_PI["dropout"],
+        l2_reg=best_params_PI["l2_reg"])
 
     print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
@@ -378,9 +378,13 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
     autoencoder_PI.fit(
         X_train_PI, X_train_PI,
         validation_data=(X_validation_PI, X_validation_PI),
-        epochs=best_params_PI.get("epochs", 100),
-        batch_size=best_params_PI.get("batch_size", 32),
-        callbacks=[early_stop],
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # qué métrica vigilar
+            patience=10,              # epochs sin mejora antes de parar
+            restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+        )],
         verbose=1
     )
 
@@ -392,7 +396,11 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
     print("🟢 Build Autoencoder with best parameters M")
     clear_session()
 
-    autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    autoencoder_M, encoder_M = build_autoencoder(
+        input_dim=X_train_M.shape[1],
+        latent_dim=best_params_M["latent_dim"],
+        dropout=best_params_M["dropout"],
+        l2_reg=best_params_M["l2_reg"])
 
     print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
@@ -401,9 +409,13 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
     autoencoder_M.fit(
         X_train_M, X_train_M,
         validation_data=(X_validation_M, X_validation_M),
-        epochs=best_params_M.get("epochs", 100),
-        batch_size=best_params_M.get("batch_size", 32),
-        callbacks=[early_stop],
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # qué métrica vigilar
+            patience=10,              # epochs sin mejora antes de parar
+            restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+        )],
         verbose=1
     )
 

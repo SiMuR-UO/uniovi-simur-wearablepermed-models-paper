@@ -216,6 +216,13 @@ def participant_loocv_iterator(X_data, y_data, m_data, val_size=0.2):
         y_train, y_val = y_train_val[train_idx], y_train_val[val_idx]
         m_train, m_val = m_train_val[train_idx], m_train_val[val_idx]
 
+
+        print("🟢 Standard Scale") 
+        sc = StandardScaler()
+        X_train = sc.fit_transform(X_train)
+        X_val   = sc.transform(X_val)
+        X_test  = sc.transform(X_test)
+
         # Log the current fold status
         print(f"--- Fold for Participant(s) {np.unique(m_test)} ---")
         print(f"Train Groups: {len(np.unique(m_train))} | Val Groups: {len(np.unique(m_val))}")
@@ -258,6 +265,8 @@ def objective(trial, X_train, X_validation):
     l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
     #lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+
+    clear_session() 
 
     autoencoder, encoder = build_autoencoder(X_train.shape[1], latent_dim, dropout, l2_reg)
 
@@ -330,11 +339,6 @@ elif (args.superclases == "CPA-METS"):
     ACTIVITIES = SUPERCLASES_CPA_METS
     (y_data) = superclases_cpa_mets(y_data)
 
-print("🟢 Standarize PI and M") 
-sc = StandardScaler()
-
-X_data = sc.fit_transform(X_data)
-
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
@@ -344,6 +348,8 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
     start_loop = time.perf_counter()
         
     metric = {}
+
+    clear_session()
 
     print("🔵 Loop: " + str(loop))
     loops.append(loop)
@@ -388,9 +394,6 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
         verbose=1
     )
 
-    print("🟢 Freeze Encoder PI")
-    encoder_PI.trainable = False
-
     autoencoder_PI.summary()
 
     print("🟢 Build Autoencoder with best parameters M")
@@ -418,9 +421,6 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
         )],
         verbose=1
     )
-
-    print("🟢 Freeze Encoder M")
-    encoder_M.trainable = False
 
     autoencoder_M.summary()
     

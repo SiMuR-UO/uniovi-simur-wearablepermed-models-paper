@@ -216,6 +216,12 @@ def participant_loocv_iterator(X_data, y_data, m_data, val_size=0.2):
         y_train, y_val = y_train_val[train_idx], y_train_val[val_idx]
         m_train, m_val = m_train_val[train_idx], m_train_val[val_idx]
 
+        print("🟢 Standard Scale") 
+        sc = StandardScaler()
+        X_train = sc.fit_transform(X_train)
+        X_val   = sc.transform(X_val)
+        X_test  = sc.transform(X_test)
+
         # Log the current fold status
         print(f"--- Fold for Participant(s) {np.unique(m_test)} ---")
         print(f"Train Groups: {len(np.unique(m_train))} | Val Groups: {len(np.unique(m_val))}")
@@ -257,8 +263,10 @@ def objective(trial, X_train, X_validation):
     latent_dim = trial.suggest_int("latent_dim", 4, 64)
     dropout = trial.suggest_float("dropout", 0.0, 0.5)
     l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
-    lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
-    
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+
+    clear_session()
+
     autoencoder, encoder = build_autoencoder(X_train.shape[1], latent_dim, dropout, l2_reg)
 
     autoencoder.compile(
@@ -328,11 +336,6 @@ elif (args.superclases == "CPA-METS"):
     ACTIVITIES = SUPERCLASES_CPA_METS
     (y_data) = superclases_cpa_mets(y_data)
 
-print("🟢 Standarize PI and M") 
-sc = StandardScaler()
-
-X_data = sc.fit_transform(X_data)
-
 print("Calculate PI+M LOOCV(Leave-One-Out)")
 data_iterator = participant_loocv_iterator(X_data, y_data, m_data)
 
@@ -348,6 +351,8 @@ for loop, (
     start_loop = time.perf_counter()
         
     metric = {}
+
+    clear_session()
 
     print("🔵 Loop: " + str(loop))
     loops.append(loop)
@@ -376,25 +381,84 @@ for loop, (
     print("🟢 Build Autoencoder with best parameters PI")
     clear_session()
 
-    autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
+    autoencoder_PI, encoder_PI = build_autoencoder(
+        input_dim=X_train_PI.shape[1],
+        latent_dim=best_params_PI["latent_dim"],
+        dropout=best_params_PI["dropout"],
+        l2_reg=best_params_PI["l2_reg"])
 
+    print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder PI")
+    autoencoder_PI.fit(
+        X_train_PI, X_train_PI,
+        validation_data=(X_validation_PI, X_validation_PI),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+        )],
+        verbose=1
+    )
+
     autoencoder_PI.summary()
 
     print("🟢 Build Autoencoder with best parameters M")
     clear_session()
 
-    autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    autoencoder_M, encoder_M = build_autoencoder(
+        input_dim=X_train_M.shape[1],
+        latent_dim=best_params_M["latent_dim"],
+        dropout=best_params_M["dropout"],
+        l2_reg=best_params_M["l2_reg"])
 
+    print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder M")
+    autoencoder_M.fit(
+        X_train_M, X_train_M,
+        validation_data=(X_validation_M, X_validation_M),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
+        )],
+        verbose=1
+    )
+
     autoencoder_M.summary()
     
     print("🟢 Build Autoencoder with best parameters C")
     clear_session()
 
-    autoencoder_C, encoder_C = build_autoencoder(input_dim=X_train_C.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    autoencoder_C, encoder_C = build_autoencoder(
+        input_dim=X_train_C.shape[1],
+        latent_dim=best_params_C["latent_dim"],
+        dropout=best_params_C["dropout"],
+        l2_reg=best_params_C["l2_reg"])
 
     autoencoder_C.compile(optimizer=Adam(learning_rate=best_params_C["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder C")
+    autoencoder_C.fit(
+        X_train_C, X_train_C,
+        validation_data=(X_validation_C, X_validation_C),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
+        )],
+        verbose=1
+    )
+    
     autoencoder_C.summary()
 
     print("🟢 Compute reconstruction MSE for PI")

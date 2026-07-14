@@ -269,6 +269,8 @@ def objective(trial, X_train, X_validation):
     l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
     lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
     
+    clear_session()
+
     autoencoder, encoder = build_autoencoder(X_train.shape[1], latent_dim, dropout, l2_reg)
 
     autoencoder.compile(
@@ -565,6 +567,8 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI,
 
     metric = {}
 
+    clear_session()
+
     print("🔵 Loop: " + str(loop))
 
     print("🟢 Optimize Autoencoder hyperparameters PI")
@@ -591,39 +595,84 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI,
     print("🟢 Build Autoencoder with best parameters PI")
     clear_session()
 
-    autoencoder_PI, encoder_PI = build_autoencoder(input_dim=X_train_PI.shape[1], latent_dim=best_params_PI["latent_dim"], dropout=best_params_PI["dropout"])
-
-    print("🟢 Freeze Encoder M")
-    encoder_PI.trainable = False
+    autoencoder_PI, encoder_PI = build_autoencoder(
+        input_dim=X_train_PI.shape[1],
+        latent_dim=best_params_PI["latent_dim"],
+        dropout=best_params_PI["dropout"],
+        l2_reg=best_params_PI["l2_reg"])
 
     print("🟢 Compile Autoencoder PI")
     autoencoder_PI.compile(optimizer=Adam(learning_rate=best_params_PI["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder PI")
+    autoencoder_PI.fit(
+        X_train_PI, X_train_PI,
+        validation_data=(X_validation_PI, X_validation_PI),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
+        )],
+        verbose=1
+    )
 
     autoencoder_PI.summary()
 
     print("🟢 Build Autoencoder with best parameters M")
     clear_session()
 
-    autoencoder_M, encoder_M = build_autoencoder(input_dim=X_train_M.shape[1], latent_dim=best_params_M["latent_dim"], dropout=best_params_M["dropout"])
+    autoencoder_M, encoder_M = build_autoencoder(
+        input_dim=X_train_M.shape[1],
+        latent_dim=best_params_M["latent_dim"],
+        dropout=best_params_M["dropout"],
+        l2_reg=best_params_M["l2_reg"])
     
-    print("🟢 Freeze Encoder M")
-    encoder_M.trainable = False
-
     print("🟢 Compile Autoencoder M")
     autoencoder_M.compile(optimizer=Adam(learning_rate=best_params_M["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder M")
+    autoencoder_M.fit(
+        X_train_M, X_train_M,
+        validation_data=(X_validation_M, X_validation_M),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
+        )],
+        verbose=1
+    )
 
     autoencoder_M.summary()
 
     print("🟢 Build Autoencoder with best parameters C")
     clear_session()
 
-    autoencoder_C, encoder_C = build_autoencoder(input_dim=X_train_C.shape[1], latent_dim=best_params_C["latent_dim"], dropout=best_params_C["dropout"])
-    
-    print("🟢 Freeze Encoder C")
-    encoder_C.trainable = False
+    autoencoder_C, encoder_C = build_autoencoder(
+        input_dim=X_train_C.shape[1],
+        latent_dim=best_params_C["latent_dim"],
+        dropout=best_params_C["dropout"],
+        l2_reg=best_params_C["l2_reg"])
 
     print("🟢 Compile Autoencoder C")
     autoencoder_C.compile(optimizer=Adam(learning_rate=best_params_C["lr"]), loss="mse")
+
+    print("🟢 Train Autoencoder C")
+    autoencoder_C.fit(
+        X_train_C, X_train_C,
+        validation_data=(X_validation_C, X_validation_C),
+        epochs=50,
+        batch_size=64,
+        callbacks=[EarlyStopping(
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
+        )],
+        verbose=1
+    )
 
     autoencoder_C.summary()
 

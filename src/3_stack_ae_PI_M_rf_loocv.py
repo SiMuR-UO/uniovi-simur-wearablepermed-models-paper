@@ -263,7 +263,6 @@ def objective(trial, X_train, X_validation):
     latent_dim = trial.suggest_int("latent_dim", 4, 64)
     dropout = trial.suggest_float("dropout", 0.0, 0.5)
     l2_reg = trial.suggest_float("l2_reg", 1e-6, 1e-2, log=True) # L2 should ALWAYS be log-scaled
-    #lr = trial.suggest_loguniform("lr", 1e-5, 1e-2)
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
 
     clear_session() 
@@ -387,9 +386,9 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
         epochs=50,
         batch_size=64,
         callbacks=[EarlyStopping(
-            monitor="val_loss",       # qué métrica vigilar
-            patience=10,              # epochs sin mejora antes de parar
-            restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
         )],
         verbose=1
     )
@@ -415,9 +414,9 @@ for loop, (X_train_PI, X_validation_PI, X_test_PI, X_train_M,  X_validation_M,  
         epochs=50,
         batch_size=64,
         callbacks=[EarlyStopping(
-            monitor="val_loss",       # qué métrica vigilar
-            patience=10,              # epochs sin mejora antes de parar
-            restore_best_weights=True # al parar, vuelve a los pesos del mejor epoch, no a los últimos
+            monitor="val_loss",       # which metric to monitor
+            patience=10,              # epochs without improvement before stopping
+            restore_best_weights=True # upon stopping, revert to the weights from the best epoch, not the final ones
         )],
         verbose=1
     )
